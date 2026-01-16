@@ -7,15 +7,16 @@ class MarkdownConverter {
         let markdown = "";
         const articles = element.querySelectorAll('article');
         
-        if (articles.length === 0) {
-            // Fallback for when there might be no articles (e.g., shared link view or different layout)
-             // Try to find the main chat container
-             const main = element.querySelector('main');
-             if (main) {
-                 return this.domToMarkdown(main);
-             }
-             return "";
-        }
+        // Prepend Frontmatter
+        markdown += `---
+tags:
+  - <% tp.file.folder() %>
+status: false
+createdAt: <% tp.date.now("YYYY-MM-DD") %>
+updatedAt: <% tp.date.now("YYYY-MM-DD") %>
+---
+
+`;
 
         articles.forEach(article => {
             const roleElement = article.querySelector('[data-message-author-role]');

@@ -31,8 +31,10 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 });
 
 function downloadMarkdown(markdown, title) {
-    chrome.storage.sync.get(['filenamePattern'], (result) => {
+    chrome.storage.sync.get(['filenamePattern', 'saveDirectory'], (result) => {
         const pattern = result.filenamePattern || 'ChatGPT_{date}_{time}_{title}';
+        const directory = result.saveDirectory || '';
+        
         const date = new Date();
         const dateStr = date.toISOString().split('T')[0];
         const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
@@ -46,6 +48,15 @@ function downloadMarkdown(markdown, title) {
 
         if (!filename.endsWith('.md')) {
             filename += '.md';
+        }
+        
+        // Prepend directory if set
+        if (directory) {
+             // Normalize slashes
+            const cleanDir = directory.replace(/\\/g, '/').replace(/\/$/, '');
+            if (cleanDir) {
+                filename = cleanDir + '/' + filename;
+            }
         }
 
         const blob = new Blob([markdown], {type: 'text/markdown'});
