@@ -6,7 +6,6 @@
   "permissions": [
     "activeTab",
     "downloads",
-    "contextMenus",
     "storage"
   ],
   "host_permissions": [
@@ -25,9 +24,6 @@
     "16": "assets/icon16.png",
     "48": "assets/icon48.png",
     "128": "assets/icon128.png"
-  },
-  "background": {
-    "service_worker": "scripts/background.js"
   },
   "content_scripts": [
     {

@@ -7,7 +7,6 @@ A beautiful and efficient Chrome Extension to save your ChatGPT conversations as
 - 📄 **Save as Markdown**: One-click download of your current conversation.
 - 🎨 **Beautiful UI**: Modern, clean interface with dark mode support.
 - 🔧 **Customizable Filenames**: Configure your preferred filename pattern using variables like `{date}`, `{title}`, and `{time}`.
-- 🖱️ **Context Menu**: Right-click anywhere on the page to "Save as Markdown".
 
 ## Installation
 
@@ -20,7 +19,6 @@ A beautiful and efficient Chrome Extension to save your ChatGPT conversations as
 ## Usage
 
 - **Click the extension icon**: Opens the popup where you can save the conversation or change settings.
-- **Right-click**: Select "Save Conversation as Markdown" from the context menu.
 
 ## Customization
 
