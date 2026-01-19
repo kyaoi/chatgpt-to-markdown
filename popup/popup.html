@@ -25,6 +25,19 @@
         </header>
 
         <div class="main-content">
+            <div class="input-group main-input-group" style="margin-bottom: 8px;">
+                <label for="save-folder" style="display:block; margin-bottom:4px; font-weight:500;">Folder</label>
+                <div class="folder-select-container" style="display:flex; gap:4px;">
+                    <input type="text" id="save-folder" list="folder-datalist" placeholder="Root Folder"
+                        style="flex:1; padding:8px; border-radius:6px; border:1px solid var(--border-color); background: var(--input-bg); color: var(--text-color);">
+                    <datalist id="folder-datalist"></datalist>
+                </div>
+            </div>
+            <div class="input-group main-input-group" style="margin-bottom: 12px;">
+                <label for="save-filename" style="display:block; margin-bottom:4px; font-weight:500;">Filename</label>
+                <input type="text" id="save-filename"
+                    style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border-color); background: var(--input-bg); color: var(--text-color);">
+            </div>
             <button id="save-btn" class="primary-btn">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -67,10 +80,26 @@
                 </div>
                 <p class="help-text">Folder will be remembered for future saves.</p>
             </div>
+
             <div class="input-group">
                 <label for="filename-pattern">Filename Pattern</label>
                 <input type="text" id="filename-pattern" placeholder="{title}_{date}.md">
                 <p class="help-text">Available variables: {title}, {date}, {time}, {id}</p>
+            </div>
+            <div class="input-group">
+                <label for="frontmatter-template">Frontmatter Template</label>
+                <textarea id="frontmatter-template" rows="6"
+                    style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color); font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+                <p class="help-text">Variables: {folder}, {title}, {url}, {date}, {time}</p>
+            </div>
+            <div class="input-group" style="margin-top: 16px; flex-direction: row; gap: 12px;">
+                <button id="export-settings-btn" class="secondary-btn"
+                    style="flex: 1; padding: 8px; border: 1px solid var(--border-color); background: var(--secondary-bg); border-radius: 4px; cursor: pointer; color: var(--text-color);">Export
+                    Settings</button>
+                <button id="import-settings-btn" class="secondary-btn"
+                    style="flex: 1; padding: 8px; border: 1px solid var(--border-color); background: var(--secondary-bg); border-radius: 4px; cursor: pointer; color: var(--text-color);">Import
+                    Settings</button>
+                <input type="file" id="import-file-input" accept=".json" style="display: none;">
             </div>
         </div>
     </div>

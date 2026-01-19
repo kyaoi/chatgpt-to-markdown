@@ -7,16 +7,10 @@ class MarkdownConverter {
         let markdown = "";
         const articles = element.querySelectorAll('article');
         
-        // Prepend Frontmatter
-        markdown += `---
-tags:
-  - <% tp.file.folder() %>
-status: false
-createdAt: <% tp.date.now("YYYY-MM-DD") %>
-updatedAt: <% tp.date.now("YYYY-MM-DD") %>
----
-
-`;
+        // Prepend Frontmatter (Moved to popup.js for customization)
+        // markdown += ...
+        
+        // Find all message blocks
 
         articles.forEach(article => {
             const roleElement = article.querySelector('[data-message-author-role]');

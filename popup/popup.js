@@ -8,6 +8,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectFolderBtn = document.getElementById('select-folder-btn');
     const folderNameDisplay = document.getElementById('folder-name');
     const clearFolderBtn = document.getElementById('clear-folder-btn');
+    const subfolderInput = document.getElementById('subfolder-name');
+    const frontmatterInput = document.getElementById('frontmatter-template');
+    const exportBtn = document.getElementById('export-settings-btn');
+    const importBtn = document.getElementById('import-settings-btn');
+    const importFileInput = document.getElementById('import-file-input');
+
+    // State
+    let currentTitle = '';
+    let currentUrl = '';
 
     // IDB Helper
     const DB_NAME = 'ChatGPTToMarkdownDB';
@@ -57,12 +66,33 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Default Frontmatter
+    const DEFAULT_FRONTMATTER = `---
+tags:
+  - {folder}
+status: false
+createdAt: {date}
+updatedAt: {date}
+---
+
+`;
+
     // Load settings
-    chrome.storage.sync.get(['filenamePattern'], async (result) => {
+    chrome.storage.sync.get(['filenamePattern', 'frontmatterTemplate', 'subfolderName'], async (result) => {
         if (result.filenamePattern) {
             filenameInput.value = result.filenamePattern;
         } else {
             filenameInput.value = 'ChatGPT_{date}_{time}_{title}'; // Default
+        }
+
+        if (result.subfolderName) {
+            subfolderInput.value = result.subfolderName;
+        }
+        
+        if (result.frontmatterTemplate !== undefined) {
+             frontmatterInput.value = result.frontmatterTemplate;
+        } else {
+             frontmatterInput.value = DEFAULT_FRONTMATTER;
         }
         
         try {
@@ -94,6 +124,47 @@ document.addEventListener('DOMContentLoaded', () => {
         await clearDirHandle();
         folderNameDisplay.textContent = 'No folder selected';
         clearFolderBtn.style.display = 'none';
+        
+        // Also clear visually
+        // Note: We don't clear frontmatter variable binding but {folder} will be empty or default
+    });
+
+    // Export Settings
+    exportBtn.addEventListener('click', () => {
+        chrome.storage.sync.get(null, (items) => {
+            const json = JSON.stringify(items, null, 2);
+            const blob = new Blob([json], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            chrome.downloads.download({
+                url: url,
+                filename: 'chatgpt_to_markdown_settings.json',
+                saveAs: true
+            });
+        });
+    });
+
+    // Import Settings
+    importBtn.addEventListener('click', () => {
+        importFileInput.click();
+    });
+
+    importFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const settings = JSON.parse(event.target.result);
+                chrome.storage.sync.set(settings, () => {
+                    statusMsg.textContent = 'Settings imported! Reloading...';
+                    setTimeout(() => location.reload(), 1000);
+                });
+            } catch (err) {
+                statusMsg.textContent = 'Invalid JSON file.';
+            }
+        };
+        reader.readAsText(file);
     });
 
     // Event Listeners
@@ -105,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (chrome.runtime.lastError) {
                         statusMsg.textContent = 'Error: ' + chrome.runtime.lastError.message;
                     } else if (response && response.markdown) {
-                        saveMarkdown(response.markdown, response.title);
+                        saveMarkdown(response.markdown, response.title, tabs[0].url);
                     } else {
                         statusMsg.textContent = 'Failed to content.';
                     }
@@ -125,57 +196,227 @@ document.addEventListener('DOMContentLoaded', () => {
         // Save settings on close
         chrome.storage.sync.set({
             filenamePattern: filenameInput.value,
-            // Directory is saved via IDB immediately on selection
+            frontmatterTemplate: frontmatterInput.value
+            // subfolderName Removed
         });
     });
 
-    async function saveMarkdown(markdown, title) {
-        chrome.storage.sync.get(['filenamePattern'], async (result) => {
-            const pattern = result.filenamePattern || 'ChatGPT_{date}_{time}_{title}';
+    const subfolderList = document.getElementById('subfolder-list');
+
+    // ... (IDB helpers and existing code)
+
+    async function verifyPermission(fileHandle, readWrite) {
+        const options = {};
+        if (readWrite) {
+            options.mode = 'readwrite';
+        }
+        if ((await fileHandle.queryPermission(options)) === 'granted') {
+            return true;
+        }
+        if ((await fileHandle.requestPermission(options)) === 'granted') {
+            return true;
+        }
+        return false;
+    }
+
+    async function scanSubfolders(rootHandle) {
+        if (!rootHandle) return;
+        
+        // Verify read permission
+        // Note: scanning requires read permission, which we might need to request if not already granted.
+        // However, auto-scanning on load might fail if permission is not persisted.
+        // We will try silent scan, if fails, we just don't populate list until user interacts.
+        try {
+             // We won't force requestPermission here to avoid popup spam on open
+             // Just check if we can iterate
+             subfolderList.innerHTML = '';
+             for await (const [name, handle] of rootHandle.entries()) {
+                 if (handle.kind === 'directory') {
+                     const option = document.createElement('option');
+                     option.value = name;
+                     subfolderList.appendChild(option);
+                 }
+             }
+        } catch (e) {
+            console.log('Scanning subfolders failed (likely no permission yet):', e);
+        }
+    }
+
+    async function verifyPermission(fileHandle, readWrite) {
+        const options = {};
+        if (readWrite) {
+            options.mode = 'readwrite';
+        }
+        if ((await fileHandle.queryPermission(options)) === 'granted') {
+            return true;
+        }
+        if ((await fileHandle.requestPermission(options)) === 'granted') {
+            return true;
+        }
+        return false;
+    }
+
+    async function scanSubfolders(rootHandle) {
+        if (!rootHandle) return;
+        
+        try {
+             folderDatalist.innerHTML = '';
+             for await (const [name, handle] of rootHandle.entries()) {
+                 if (handle.kind === 'directory') {
+                     const option = document.createElement('option');
+                     option.value = name;
+                     folderDatalist.appendChild(option);
+                 }
+             }
+        } catch (e) {
+            console.log('Scanning subfolders failed (likely no permission yet):', e);
+        }
+    }
+
+    function generateFilename(pattern, title) {
+        const date = new Date();
+        const dateStr = date.toISOString().split('T')[0];
+        const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
+        const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
+
+        let filename = pattern
+            .replace('{title}', safeTitle)
+            .replace('{date}', dateStr)
+            .replace('{time}', timeStr)
+            .replace('{id}', Date.now().toString());
+
+        if (!filename.endsWith('.md')) {
+            filename += '.md';
+        }
+        return filename;
+    }
+
+    // Load settings
+    chrome.storage.sync.get(['filenamePattern', 'frontmatterTemplate'], async (result) => {
+        if (result.filenamePattern) {
+            filenameInput.value = result.filenamePattern;
+        } else {
+            filenameInput.value = 'ChatGPT_{date}_{time}_{title}'; // Default
+        }
+        
+        if (result.frontmatterTemplate !== undefined) {
+             frontmatterInput.value = result.frontmatterTemplate;
+        } else {
+             frontmatterInput.value = DEFAULT_FRONTMATTER;
+        }
+        
+        // Get Root Handle for display
+        try {
+            const handle = await getDirHandle();
+            if (handle) {
+                folderNameDisplay.textContent = handle.name;
+                clearFolderBtn.style.display = 'inline-flex';
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    });
+
+    selectFolderBtn.addEventListener('click', async () => {
+        try {
+            const handle = await window.showDirectoryPicker();
+            await saveDirHandle(handle);
+            folderNameDisplay.textContent = handle.name;
+            clearFolderBtn.style.display = 'inline-flex';
+        } catch (e) {
+             // ...
+        }
+    });
+
+    // ... (Clear handler)
+
+    async function saveMarkdown(rawMarkdown, title, url, targetSubfolder, targetFilename) {
+        chrome.storage.sync.get(['frontmatterTemplate'], async (result) => {
+            const template = result.frontmatterTemplate !== undefined ? result.frontmatterTemplate : DEFAULT_FRONTMATTER;
             
             const date = new Date();
             const dateStr = date.toISOString().split('T')[0];
             const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
             const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
 
-            let filename = pattern
-                .replace('{title}', safeTitle)
-                .replace('{date}', dateStr)
-                .replace('{time}', timeStr)
-                .replace('{id}', Date.now().toString());
-
-            if (!filename.endsWith('.md')) {
-                filename += '.md';
-            }
+            let targetDirHandle = null;
+            let dirName = 'Downloads';
+            let rootHandle = null;
 
             try {
-                const dirHandle = await getDirHandle();
-                if (dirHandle) {
-                    // Use File System Access API
-                    const options = {
-                        suggestedName: filename,
-                        startIn: dirHandle,
-                        types: [{
-                            description: 'Markdown File',
-                            accept: {'text/markdown': ['.md']},
-                        }],
-                    };
-                    const fileHandle = await window.showSaveFilePicker(options);
+                rootHandle = await getDirHandle();
+            } catch(e) { console.error(e); }
+
+            if (rootHandle) {
+                // We MUST verify/request permission here because we are about to write
+                const permitted = await verifyPermission(rootHandle, true);
+                if (!permitted) {
+                    statusMsg.textContent = 'Permission denied.';
+                    return;
+                }
+
+                try {
+                    if (targetSubfolder) {
+                        targetDirHandle = await rootHandle.getDirectoryHandle(targetSubfolder, { create: true });
+                        dirName = targetDirHandle.name; // This should be targetSubfolder
+                    } else {
+                        targetDirHandle = rootHandle;
+                        dirName = rootHandle.name;
+                    }
+                } catch (err) {
+                    console.error("Failed to get/create folder:", err);
+                    statusMsg.textContent = 'Folder error: ' + err.message;
+                    return;
+                }
+            }
+
+            // Process Frontmatter
+            // Use targetSubfolder if present, otherwise just root name? 
+            // The requirement is "get 'fuga' and use as folder name".
+            // So if targetSubfolder is used, {folder} = targetSubfolder.
+            // If empty, {folder} = rootDirName.
+            const displayFolderName = targetSubfolder || (rootHandle ? rootHandle.name : 'Downloads');
+
+            let frontmatter = template
+                .replace(/{folder}/g, displayFolderName)
+                .replace(/{title}/g, safeTitle)
+                .replace(/{url}/g, url || '')
+                .replace(/{date}/g, dateStr)
+                .replace(/{time}/g, timeStr);
+
+            const finalMarkdown = frontmatter + rawMarkdown;
+            const filename = targetFilename || 'output.md';
+
+            try {
+                if (targetDirHandle) {
+                    // Direct Write (Silent Save)
+                    const fileHandle = await targetDirHandle.getFileHandle(filename, { create: true });
                     const writable = await fileHandle.createWritable();
-                    await writable.write(markdown);
+                    await writable.write(finalMarkdown);
                     await writable.close();
                     
-                    statusMsg.textContent = 'Saved!';
+                    statusMsg.textContent = `Saved to ${displayFolderName}!`;
+                    
+                    // Re-scan if new folder
+                    if (targetSubfolder && rootHandle) {
+                         scanSubfolders(rootHandle);
+                    }
                     setTimeout(() => statusMsg.textContent = '', 2000);
+
                 } else {
                     // Fallback to chrome.downloads
-                    const blob = new Blob([markdown], {type: 'text/markdown'});
-                    const url = URL.createObjectURL(blob);
+                    let finalDLFilename = filename;
+                    if (targetSubfolder) {
+                         finalDLFilename = targetSubfolder + '/' + filename;
+                    }
+
+                    const blob = new Blob([finalMarkdown], {type: 'text/markdown'});
+                    const blobUrl = URL.createObjectURL(blob);
                     
                     chrome.downloads.download({
-                        url: url,
-                        filename: filename,
-                        saveAs: true
+                        url: blobUrl,
+                        filename: finalDLFilename,
+                        saveAs: false 
                     }, () => {
                          if (chrome.runtime.lastError) {
                             statusMsg.textContent = 'Save failed.';
@@ -186,12 +427,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
             } catch (e) {
-                if (e.name !== 'AbortError') {
+                 if (e.name !== 'AbortError') {
                      console.error(e);
                      statusMsg.textContent = 'Save error: ' + e.message;
-                } else {
+                 } else {
                      statusMsg.textContent = 'Save cancelled';
-                }
+                 }
             }
         });
     }
