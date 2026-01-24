@@ -7,27 +7,17 @@ class MarkdownConverter {
         let markdown = "";
         const articles = element.querySelectorAll('article');
         
-        // Prepend Frontmatter (Moved to popup.js for customization)
-        // markdown += ...
-        
         // Find all message blocks
-
         articles.forEach(article => {
             const roleElement = article.querySelector('[data-message-author-role]');
-            const role = roleElement ? roleElement.getAttribute('data-message-author-role') : 'user'; // Default to user if not found/implicit
+            const role = roleElement ? roleElement.getAttribute('data-message-author-role') : 'user'; 
             
             markdown += `# ${role.charAt(0).toUpperCase() + role.slice(1)}\n\n`;
             
-            // The content is usually in a div with class '.markdown' or just the text parts
-            // We look for the main content wrapper.
-            // In recent ChatGPT versions, it might be nested.
             let contentNode = article.querySelector('.markdown');
             
             if (!contentNode) {
-                // Determine if it's a user message which might not have .markdown class
-                // User messages are often just text in a specific div
-                contentNode = roleElement ? roleElement.parentElement.parentElement : article; // Heuristic
-                // Filter out the role header itself if we grabbed too high
+                contentNode = roleElement ? roleElement.parentElement.parentElement : article; 
             }
             
             if (contentNode) {
@@ -36,15 +26,26 @@ class MarkdownConverter {
             }
         });
 
-        return markdown;
+        // Final cleanup: Remove excessive newlines (3 or more becomes 2)
+        return markdown.replace(/\n{3,}/g, '\n\n').trim();
     }
 
     domToMarkdown(node) {
         if (!node) return "";
         let text = "";
         
+        // Block tags where pure whitespace children should be ignored
+        const BLOCK_TAGS = ['div', 'section', 'article', 'aside', 'header', 'footer', 'ul', 'ol', 'pre', 'blockquote', 'table', 'tbody', 'thead', 'tr'];
+        const parentTag = node.tagName ? node.tagName.toLowerCase() : '';
+
         node.childNodes.forEach(child => {
             if (child.nodeType === Node.TEXT_NODE) {
+                // If parent is a structural block, usually direct text nodes are whitespace for formatting
+                // We shouldn't strip inside 'p' or 'span' usually, but 'div' heavily depends. 
+                // ChatGPT structure is pretty clean though.
+                if (BLOCK_TAGS.includes(parentTag) && child.textContent.trim().length === 0) {
+                    return; 
+                }
                 text += child.textContent;
             } else if (child.nodeType === Node.ELEMENT_NODE) {
                 const tagName = child.tagName.toLowerCase();
@@ -73,6 +74,10 @@ class MarkdownConverter {
                     case 'h6':
                         text += "###### " + this.domToMarkdown(child).trim() + "\n\n";
                         break;
+                    case 'blockquote':
+                        const quoteContent = this.domToMarkdown(child).trim();
+                        text += quoteContent.split('\n').map(line => '> ' + line).join('\n') + "\n\n";
+                        break;
                     case 'ul':
                         text += this.processList(child, false) + "\n";
                         break;
@@ -80,26 +85,21 @@ class MarkdownConverter {
                         text += this.processList(child, true) + "\n";
                         break;
                     case 'li':
-                        // Handled by processList usually, but if encountered standalone logic might be needed
-                        // For recursion, just return content
+                        // Handled by processList, but for recursion safety:
                          text += this.domToMarkdown(child);
                         break;
                     case 'pre':
                         // Check for code block content
                         const codeBlock = child.querySelector('code');
                         if (codeBlock) {
-                            // Extract language class
                             const langClass = Array.from(codeBlock.classList).find(c => c.startsWith('language-'));
                             const lang = langClass ? langClass.replace('language-', '') : '';
-                            // Get direct text content, avoiding extra spans if possible, 
-                            // though often innerText is enough for code blocks
                             text += "```" + lang + "\n" + codeBlock.innerText + "\n```\n\n";
                         } else {
                              text += "```\n" + child.innerText + "\n```\n\n";
                         }
                         break;
                     case 'code':
-                        // Inline code - avoid double wrapping if inside pre
                         if (node.tagName.toLowerCase() !== 'pre') {
                             text += "`" + child.textContent + "`";
                         } else {
@@ -144,6 +144,7 @@ class MarkdownConverter {
         
         return text;
     }
+
 
     processList(listNode, isOrdered) {
         let text = "";

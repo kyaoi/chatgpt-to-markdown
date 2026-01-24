@@ -4,19 +4,73 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsPanel = document.getElementById('settings-panel');
     const openSettingsBtn = document.getElementById('open-settings');
     const closeSettingsBtn = document.getElementById('close-settings');
-    const filenameInput = document.getElementById('filename-pattern');
-    const selectFolderBtn = document.getElementById('select-folder-btn');
-    const folderNameDisplay = document.getElementById('folder-name');
-    const clearFolderBtn = document.getElementById('clear-folder-btn');
-    const subfolderInput = document.getElementById('subfolder-name');
-    const frontmatterInput = document.getElementById('frontmatter-template');
     const exportBtn = document.getElementById('export-settings-btn');
     const importBtn = document.getElementById('import-settings-btn');
     const importFileInput = document.getElementById('import-file-input');
 
+    // UI Elements
+    const previewFilename = document.getElementById('preview-filename');
+    const previewDate = document.getElementById('preview-date');
+    const connectionStatus = document.getElementById('connection-status');
+
+    // Settings elements
+    const filenameInput = document.getElementById('filename-pattern');
+    const selectFolderBtn = document.getElementById('select-folder-btn');
+    const folderNameDisplay = document.getElementById('folder-name');
+    const clearFolderBtn = document.getElementById('clear-folder-btn');
+    // subfolder-name removed
+    const frontmatterInput = document.getElementById('frontmatter-template');
+    const subfolderInput = document.getElementById('subfolder-name'); // Might be null but ID exists? Check HTML. input removed?
+    // In popup.html we removed subfolderName? Yes.
+    // But `chrome.storage.sync.get... subfolderName` relies on it?
+    // Line 76: get(['subfolderName'])
+    // Line 83: if (result.subfolderName) { subfolderInput.value = ... }
+    // If subfolderInput is null, line 84 throws error.
+    // I should check if I should remove subfolderName usage.
+    // User requested "No input field". The "subfolder" logic was for the old mechanism.
+    // I should likely remove subfolderInput related code too.
+
+
+    // State
+    const DEFAULT_PATTERN = '{title}_{date}_{time}';
+
     // State
     let currentTitle = '';
     let currentUrl = '';
+
+    // Initialize Preview
+    function initPreview() {
+        chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+            if (tabs[0].url && (tabs[0].url.includes('chatgpt.com') || tabs[0].url.includes('chat.openai.com'))) {
+                // Connected
+                if(connectionStatus) connectionStatus.classList.add('connected');
+                
+                // Get Title
+                let title = tabs[0].title || 'Conversation';
+                title = title.replace('ChatGPT', '').replace(/ - OpenAI$/, '').trim();
+                if(!title) title = 'Conversation';
+
+                // Generate Preview Filename
+                chrome.storage.sync.get(['filenamePattern'], (res) => {
+                    const pattern = res.filenamePattern || DEFAULT_PATTERN;
+                    const filename = generateFilename(pattern, title);
+                    
+                    if(previewFilename) previewFilename.textContent = filename;
+                    
+                    const date = new Date();
+                    if(previewDate) previewDate.textContent = date.toLocaleString();
+                });
+
+            } else {
+                 if(previewFilename) previewFilename.textContent = 'No ChatGPT Tab Detected';
+                 if(previewDate) previewDate.textContent = 'Please open ChatGPT';
+                 if(statusMsg) statusMsg.textContent = 'Please open a ChatGPT conversation.';
+            }
+        });
+    }
+
+    // Call init
+    initPreview();
 
     // IDB Helper
     const DB_NAME = 'ChatGPTToMarkdownDB';
@@ -79,14 +133,10 @@ updatedAt: {date}
 
     // Load settings
     chrome.storage.sync.get(['filenamePattern', 'frontmatterTemplate', 'subfolderName'], async (result) => {
-        if (result.filenamePattern) {
-            filenameInput.value = result.filenamePattern;
-        } else {
-            filenameInput.value = 'ChatGPT_{date}_{time}_{title}'; // Default
-        }
-
-        if (result.subfolderName) {
-            subfolderInput.value = result.subfolderName;
+        // ... (filename logic kept minimal or removed if not used here but used in saveBtn)
+         if (result.filenamePattern) {
+            // We don't have filenameInput anymore, so this is irrelevant for UI but good for state? 
+            // Actually we don't need to populate inputs.
         }
         
         if (result.frontmatterTemplate !== undefined) {
@@ -106,6 +156,11 @@ updatedAt: {date}
         }
     });
 
+
+
+    // ... (rest of imports)
+
+    // selectFolderBtn listener
     selectFolderBtn.addEventListener('click', async () => {
         try {
             const handle = await window.showDirectoryPicker();
@@ -124,9 +179,6 @@ updatedAt: {date}
         await clearDirHandle();
         folderNameDisplay.textContent = 'No folder selected';
         clearFolderBtn.style.display = 'none';
-        
-        // Also clear visually
-        // Note: We don't clear frontmatter variable binding but {folder} will be empty or default
     });
 
     // Export Settings
@@ -167,18 +219,106 @@ updatedAt: {date}
         reader.readAsText(file);
     });
 
+    // Helper: Generate Filename
+    function generateFilename(pattern, title) {
+        const date = new Date();
+        const dateStr = date.toISOString().split('T')[0];
+        const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
+        const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
+
+        let filename = pattern
+            .replace('{title}', safeTitle)
+            .replace('{date}', dateStr)
+            .replace('{time}', timeStr)
+            .replace('{id}', Date.now().toString());
+
+        if (!filename.endsWith('.md')) {
+            filename += '.md';
+        }
+        return filename;
+    }
+
+    async function saveMarkdownDirect(rawMarkdown, title, url, dirHandle, filename) {
+        chrome.storage.sync.get(['frontmatterTemplate'], async (result) => {
+             const template = result.frontmatterTemplate !== undefined ? result.frontmatterTemplate : DEFAULT_FRONTMATTER;
+             
+             const date = new Date();
+             const dateStr = date.toISOString().split('T')[0];
+             const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
+             const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
+
+             // displayFolderName = dirHandle.name
+             const displayFolderName = dirHandle.name;
+
+             let frontmatter = template
+                .replace(/{folder}/g, displayFolderName)
+                .replace(/{title}/g, safeTitle)
+                .replace(/{url}/g, url || '')
+                .replace(/{date}/g, dateStr)
+                .replace(/{time}/g, timeStr);
+
+             const finalMarkdown = frontmatter + rawMarkdown;
+
+             try {
+                const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(finalMarkdown);
+                await writable.close();
+
+                statusMsg.textContent = `Saved to ${displayFolderName}!`;
+                setTimeout(() => statusMsg.textContent = '', 3000);
+             } catch (e) {
+                 console.error(e);
+                 statusMsg.textContent = 'Write error: ' + e.message;
+             }
+        });
+    }
+
     // Event Listeners
+
     saveBtn.addEventListener('click', () => {
         statusMsg.textContent = 'Processing...';
         chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
             if (tabs[0].url && (tabs[0].url.includes('chatgpt.com') || tabs[0].url.includes('chat.openai.com'))) {
-                chrome.tabs.sendMessage(tabs[0].id, {action: 'get_markdown'}, (response) => {
+                chrome.tabs.sendMessage(tabs[0].id, {action: 'get_markdown'}, async (response) => {
                     if (chrome.runtime.lastError) {
                         statusMsg.textContent = 'Error: ' + chrome.runtime.lastError.message;
                     } else if (response && response.markdown) {
-                        saveMarkdown(response.markdown, response.title, tabs[0].url);
+                        try {
+                            // 1. Get StartIn Handle
+                            let startInHandle = undefined;
+                            try {
+                                startInHandle = await getDirHandle();
+                            } catch (e) {
+                                // Ignore if no default handle
+                            }
+
+                            // 2. Open Directory Picker
+                            const finalDirHandle = await window.showDirectoryPicker({
+                                id: 'save-folder-picker',
+                                startIn: startInHandle,
+                                mode: 'readwrite'
+                            });
+
+                            // 3. Generate Filename (Need pattern from settings)
+                            chrome.storage.sync.get(['filenamePattern'], async (res) => {
+                                const pattern = res.filenamePattern || DEFAULT_PATTERN;
+                                const filename = generateFilename(pattern, response.title);
+                                
+                                // 4. Save
+                                await saveMarkdownDirect(response.markdown, response.title, tabs[0].url, finalDirHandle, filename);
+                            });
+
+                        } catch (e) {
+                            if (e.name !== 'AbortError') {
+                                console.error(e);
+                                statusMsg.textContent = 'Save cancelled or failed.';
+                            } else {
+                                statusMsg.textContent = ''; // Cancelled
+                            }
+                        }
                     } else {
-                        statusMsg.textContent = 'Failed to content.';
+                        statusMsg.textContent = 'Failed to get content.';
                     }
                 });
             } else {
@@ -242,198 +382,9 @@ updatedAt: {date}
         }
     }
 
-    async function verifyPermission(fileHandle, readWrite) {
-        const options = {};
-        if (readWrite) {
-            options.mode = 'readwrite';
-        }
-        if ((await fileHandle.queryPermission(options)) === 'granted') {
-            return true;
-        }
-        if ((await fileHandle.requestPermission(options)) === 'granted') {
-            return true;
-        }
-        return false;
-    }
 
-    async function scanSubfolders(rootHandle) {
-        if (!rootHandle) return;
-        
-        try {
-             folderDatalist.innerHTML = '';
-             for await (const [name, handle] of rootHandle.entries()) {
-                 if (handle.kind === 'directory') {
-                     const option = document.createElement('option');
-                     option.value = name;
-                     folderDatalist.appendChild(option);
-                 }
-             }
-        } catch (e) {
-            console.log('Scanning subfolders failed (likely no permission yet):', e);
-        }
-    }
+    // REMOVE OLD saveMarkdown function and old listeners if possible or leave dead code?
+    // User asked to replace functionalities.
+    // I will replace the block of old logic with comment or removing.
 
-    function generateFilename(pattern, title) {
-        const date = new Date();
-        const dateStr = date.toISOString().split('T')[0];
-        const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
-        const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
-
-        let filename = pattern
-            .replace('{title}', safeTitle)
-            .replace('{date}', dateStr)
-            .replace('{time}', timeStr)
-            .replace('{id}', Date.now().toString());
-
-        if (!filename.endsWith('.md')) {
-            filename += '.md';
-        }
-        return filename;
-    }
-
-    // Load settings
-    chrome.storage.sync.get(['filenamePattern', 'frontmatterTemplate'], async (result) => {
-        if (result.filenamePattern) {
-            filenameInput.value = result.filenamePattern;
-        } else {
-            filenameInput.value = 'ChatGPT_{date}_{time}_{title}'; // Default
-        }
-        
-        if (result.frontmatterTemplate !== undefined) {
-             frontmatterInput.value = result.frontmatterTemplate;
-        } else {
-             frontmatterInput.value = DEFAULT_FRONTMATTER;
-        }
-        
-        // Get Root Handle for display
-        try {
-            const handle = await getDirHandle();
-            if (handle) {
-                folderNameDisplay.textContent = handle.name;
-                clearFolderBtn.style.display = 'inline-flex';
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    });
-
-    selectFolderBtn.addEventListener('click', async () => {
-        try {
-            const handle = await window.showDirectoryPicker();
-            await saveDirHandle(handle);
-            folderNameDisplay.textContent = handle.name;
-            clearFolderBtn.style.display = 'inline-flex';
-        } catch (e) {
-             // ...
-        }
-    });
-
-    // ... (Clear handler)
-
-    async function saveMarkdown(rawMarkdown, title, url, targetSubfolder, targetFilename) {
-        chrome.storage.sync.get(['frontmatterTemplate'], async (result) => {
-            const template = result.frontmatterTemplate !== undefined ? result.frontmatterTemplate : DEFAULT_FRONTMATTER;
-            
-            const date = new Date();
-            const dateStr = date.toISOString().split('T')[0];
-            const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
-            const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
-
-            let targetDirHandle = null;
-            let dirName = 'Downloads';
-            let rootHandle = null;
-
-            try {
-                rootHandle = await getDirHandle();
-            } catch(e) { console.error(e); }
-
-            if (rootHandle) {
-                // We MUST verify/request permission here because we are about to write
-                const permitted = await verifyPermission(rootHandle, true);
-                if (!permitted) {
-                    statusMsg.textContent = 'Permission denied.';
-                    return;
-                }
-
-                try {
-                    if (targetSubfolder) {
-                        targetDirHandle = await rootHandle.getDirectoryHandle(targetSubfolder, { create: true });
-                        dirName = targetDirHandle.name; // This should be targetSubfolder
-                    } else {
-                        targetDirHandle = rootHandle;
-                        dirName = rootHandle.name;
-                    }
-                } catch (err) {
-                    console.error("Failed to get/create folder:", err);
-                    statusMsg.textContent = 'Folder error: ' + err.message;
-                    return;
-                }
-            }
-
-            // Process Frontmatter
-            // Use targetSubfolder if present, otherwise just root name? 
-            // The requirement is "get 'fuga' and use as folder name".
-            // So if targetSubfolder is used, {folder} = targetSubfolder.
-            // If empty, {folder} = rootDirName.
-            const displayFolderName = targetSubfolder || (rootHandle ? rootHandle.name : 'Downloads');
-
-            let frontmatter = template
-                .replace(/{folder}/g, displayFolderName)
-                .replace(/{title}/g, safeTitle)
-                .replace(/{url}/g, url || '')
-                .replace(/{date}/g, dateStr)
-                .replace(/{time}/g, timeStr);
-
-            const finalMarkdown = frontmatter + rawMarkdown;
-            const filename = targetFilename || 'output.md';
-
-            try {
-                if (targetDirHandle) {
-                    // Direct Write (Silent Save)
-                    const fileHandle = await targetDirHandle.getFileHandle(filename, { create: true });
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(finalMarkdown);
-                    await writable.close();
-                    
-                    statusMsg.textContent = `Saved to ${displayFolderName}!`;
-                    
-                    // Re-scan if new folder
-                    if (targetSubfolder && rootHandle) {
-                         scanSubfolders(rootHandle);
-                    }
-                    setTimeout(() => statusMsg.textContent = '', 2000);
-
-                } else {
-                    // Fallback to chrome.downloads
-                    let finalDLFilename = filename;
-                    if (targetSubfolder) {
-                         finalDLFilename = targetSubfolder + '/' + filename;
-                    }
-
-                    const blob = new Blob([finalMarkdown], {type: 'text/markdown'});
-                    const blobUrl = URL.createObjectURL(blob);
-                    
-                    chrome.downloads.download({
-                        url: blobUrl,
-                        filename: finalDLFilename,
-                        saveAs: false 
-                    }, () => {
-                         if (chrome.runtime.lastError) {
-                            statusMsg.textContent = 'Save failed.';
-                         } else {
-                            statusMsg.textContent = 'Saved via Download!';
-                         }
-                         setTimeout(() => statusMsg.textContent = '', 2000);
-                    });
-                }
-            } catch (e) {
-                 if (e.name !== 'AbortError') {
-                     console.error(e);
-                     statusMsg.textContent = 'Save error: ' + e.message;
-                 } else {
-                     statusMsg.textContent = 'Save cancelled';
-                 }
-            }
-        });
-    }
 });

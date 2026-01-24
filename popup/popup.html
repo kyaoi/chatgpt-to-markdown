@@ -25,27 +25,29 @@
         </header>
 
         <div class="main-content">
-            <div class="input-group main-input-group" style="margin-bottom: 8px;">
-                <label for="save-folder" style="display:block; margin-bottom:4px; font-weight:500;">Folder</label>
-                <div class="folder-select-container" style="display:flex; gap:4px;">
-                    <input type="text" id="save-folder" list="folder-datalist" placeholder="Root Folder"
-                        style="flex:1; padding:8px; border-radius:6px; border:1px solid var(--border-color); background: var(--input-bg); color: var(--text-color);">
-                    <datalist id="folder-datalist"></datalist>
+            <div id="file-preview-card" class="preview-card">
+                <div class="preview-header">
+                    <span class="preview-label">Ready to Save</span>
+                    <span id="connection-status" class="status-indicator"></span>
+                </div>
+                <div class="preview-details">
+                    <div class="preview-row">
+                        <span class="preview-icon">📄</span>
+                        <span id="preview-filename" class="preview-text">Loading...</span>
+                    </div>
+                    <div class="preview-row">
+                        <span class="preview-icon">📅</span>
+                        <span id="preview-date" class="preview-subtext">...</span>
+                    </div>
                 </div>
             </div>
-            <div class="input-group main-input-group" style="margin-bottom: 12px;">
-                <label for="save-filename" style="display:block; margin-bottom:4px; font-weight:500;">Filename</label>
-                <input type="text" id="save-filename"
-                    style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border-color); background: var(--input-bg); color: var(--text-color);">
-            </div>
+
             <button id="save-btn" class="primary-btn">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="7 10 12 15 17 10"></polyline>
-                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                 </svg>
-                Save Conversation
+                Select Folder & Save
             </button>
             <p id="status-msg" class="status"></p>
         </div>
