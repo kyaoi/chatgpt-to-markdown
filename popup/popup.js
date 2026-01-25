@@ -121,22 +121,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Default Frontmatter
-    const DEFAULT_FRONTMATTER = `---
-tags:
-  - {folder}
-status: false
-createdAt: {date}
-updatedAt: {date}
----
-
-`;
+    const DEFAULT_FRONTMATTER = '';
 
     // Load settings
-    chrome.storage.sync.get(['filenamePattern', 'frontmatterTemplate', 'subfolderName'], async (result) => {
-        // ... (filename logic kept minimal or removed if not used here but used in saveBtn)
-         if (result.filenamePattern) {
-            // We don't have filenameInput anymore, so this is irrelevant for UI but good for state? 
-            // Actually we don't need to populate inputs.
+    chrome.storage.sync.get(['filenamePattern', 'frontmatterTemplate'], async (result) => {
+        if (result.filenamePattern) {
+            filenameInput.value = result.filenamePattern;
+        } else {
+            filenameInput.value = DEFAULT_PATTERN;
         }
         
         if (result.frontmatterTemplate !== undefined) {
@@ -156,9 +148,19 @@ updatedAt: {date}
         }
     });
 
+    // Save settings on input change
+    function saveSettings() {
+        chrome.storage.sync.set({
+            filenamePattern: filenameInput.value,
+            frontmatterTemplate: frontmatterInput.value
+        }, () => {
+             // Re-init preview to reflect pattern changes
+             initPreview();
+        });
+    }
 
-
-    // ... (rest of imports)
+    filenameInput.addEventListener('input', saveSettings);
+    frontmatterInput.addEventListener('input', saveSettings);
 
     // selectFolderBtn listener
     selectFolderBtn.addEventListener('click', async () => {
@@ -209,8 +211,14 @@ updatedAt: {date}
             try {
                 const settings = JSON.parse(event.target.result);
                 chrome.storage.sync.set(settings, () => {
-                    statusMsg.textContent = 'Settings imported! Reloading...';
-                    setTimeout(() => location.reload(), 1000);
+                    statusMsg.textContent = 'Settings imported!';
+                    
+                    // Update UI
+                    if(settings.filenamePattern) filenameInput.value = settings.filenamePattern;
+                    if(settings.frontmatterTemplate !== undefined) frontmatterInput.value = settings.frontmatterTemplate;
+                    
+                    initPreview();
+                    setTimeout(() => statusMsg.textContent = '', 2000);
                 });
             } catch (err) {
                 statusMsg.textContent = 'Invalid JSON file.';
@@ -238,39 +246,47 @@ updatedAt: {date}
         return filename;
     }
 
-    async function saveMarkdownDirect(rawMarkdown, title, url, dirHandle, filename) {
-        chrome.storage.sync.get(['frontmatterTemplate'], async (result) => {
-             const template = result.frontmatterTemplate !== undefined ? result.frontmatterTemplate : DEFAULT_FRONTMATTER;
-             
-             const date = new Date();
-             const dateStr = date.toISOString().split('T')[0];
-             const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
-             const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
-
-             // displayFolderName = dirHandle.name
-             const displayFolderName = dirHandle.name;
-
-             let frontmatter = template
-                .replace(/{folder}/g, displayFolderName)
-                .replace(/{title}/g, safeTitle)
-                .replace(/{url}/g, url || '')
-                .replace(/{date}/g, dateStr)
-                .replace(/{time}/g, timeStr);
-
-             const finalMarkdown = frontmatter + rawMarkdown;
-
-             try {
-                const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
-                const writable = await fileHandle.createWritable();
-                await writable.write(finalMarkdown);
-                await writable.close();
-
-                statusMsg.textContent = `Saved to ${displayFolderName}!`;
-                setTimeout(() => statusMsg.textContent = '', 3000);
-             } catch (e) {
-                 console.error(e);
-                 statusMsg.textContent = 'Write error: ' + e.message;
-             }
+    function saveMarkdownDirect(rawMarkdown, title, url, dirHandle, filename) {
+        return new Promise((resolve, reject) => {
+            chrome.storage.sync.get(['frontmatterTemplate'], async (result) => {
+                 const template = result.frontmatterTemplate !== undefined ? result.frontmatterTemplate : DEFAULT_FRONTMATTER;
+                 
+                 let finalMarkdown = rawMarkdown;
+    
+                 if (template && template.trim() !== '') {
+                     const date = new Date();
+                     const dateStr = date.toISOString().split('T')[0];
+                     const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
+                     const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
+        
+                     // displayFolderName = dirHandle.name
+                     const displayFolderName = dirHandle.name;
+        
+                     let frontmatter = template
+                        .replace(/{folder}/g, displayFolderName)
+                        .replace(/{title}/g, safeTitle)
+                        .replace(/{url}/g, url || '')
+                        .replace(/{date}/g, dateStr)
+                        .replace(/{time}/g, timeStr);
+                     
+                     finalMarkdown = frontmatter + rawMarkdown;
+                 }
+    
+                 try {
+                    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(finalMarkdown);
+                    await writable.close();
+    
+                    statusMsg.textContent = `Saved to ${dirHandle.name}!`;
+                    setTimeout(() => statusMsg.textContent = '', 3000);
+                    resolve();
+                 } catch (e) {
+                     console.error(e);
+                     statusMsg.textContent = 'Write error: ' + e.message;
+                     reject(e);
+                 }
+            });
         });
     }
 
@@ -299,14 +315,25 @@ updatedAt: {date}
                                 startIn: startInHandle,
                                 mode: 'readwrite'
                             });
-
+                            
                             // 3. Generate Filename (Need pattern from settings)
                             chrome.storage.sync.get(['filenamePattern'], async (res) => {
-                                const pattern = res.filenamePattern || DEFAULT_PATTERN;
-                                const filename = generateFilename(pattern, response.title);
-                                
-                                // 4. Save
-                                await saveMarkdownDirect(response.markdown, response.title, tabs[0].url, finalDirHandle, filename);
+                                try {
+                                    const pattern = res.filenamePattern || DEFAULT_PATTERN;
+                                    const filename = generateFilename(pattern, response.title);
+                                    
+                                    // 4. Save Content FIRST
+                                    await saveMarkdownDirect(response.markdown, response.title, tabs[0].url, finalDirHandle, filename);
+                                    
+                                    // 5. Save Handle LAST (Only if write succeeded)
+                                    await saveDirHandle(finalDirHandle);
+                                    
+                                    folderNameDisplay.textContent = finalDirHandle.name;
+                                    clearFolderBtn.style.display = 'inline-flex';
+                                } catch (innerErr) {
+                                    console.error("Save failed:", innerErr);
+                                    // statusMsg handled in saveMarkdownDirect
+                                }
                             });
 
                         } catch (e) {
@@ -333,58 +360,6 @@ updatedAt: {date}
 
     closeSettingsBtn.addEventListener('click', () => {
         settingsPanel.classList.add('hidden');
-        // Save settings on close
-        chrome.storage.sync.set({
-            filenamePattern: filenameInput.value,
-            frontmatterTemplate: frontmatterInput.value
-            // subfolderName Removed
-        });
     });
-
-    const subfolderList = document.getElementById('subfolder-list');
-
-    // ... (IDB helpers and existing code)
-
-    async function verifyPermission(fileHandle, readWrite) {
-        const options = {};
-        if (readWrite) {
-            options.mode = 'readwrite';
-        }
-        if ((await fileHandle.queryPermission(options)) === 'granted') {
-            return true;
-        }
-        if ((await fileHandle.requestPermission(options)) === 'granted') {
-            return true;
-        }
-        return false;
-    }
-
-    async function scanSubfolders(rootHandle) {
-        if (!rootHandle) return;
-        
-        // Verify read permission
-        // Note: scanning requires read permission, which we might need to request if not already granted.
-        // However, auto-scanning on load might fail if permission is not persisted.
-        // We will try silent scan, if fails, we just don't populate list until user interacts.
-        try {
-             // We won't force requestPermission here to avoid popup spam on open
-             // Just check if we can iterate
-             subfolderList.innerHTML = '';
-             for await (const [name, handle] of rootHandle.entries()) {
-                 if (handle.kind === 'directory') {
-                     const option = document.createElement('option');
-                     option.value = name;
-                     subfolderList.appendChild(option);
-                 }
-             }
-        } catch (e) {
-            console.log('Scanning subfolders failed (likely no permission yet):', e);
-        }
-    }
-
-
-    // REMOVE OLD saveMarkdown function and old listeners if possible or leave dead code?
-    // User asked to replace functionalities.
-    // I will replace the block of old logic with comment or removing.
 
 });

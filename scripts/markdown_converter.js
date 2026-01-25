@@ -143,10 +143,12 @@ class MarkdownConverter {
                                 // simpler: ChatGPT treats \[ ... \] as display and \( ... \) as inline usually, 
                                 // but here we are extracting from DOM.
                                 // If it's a div.katex-display, use $$.
-                                const isBlock = child.classList.contains('katex-display') || (child.tagName.toLowerCase() === 'div' && child.classList.contains('math-display'));
+                                const isBlock = child.classList.contains('katex-display') || 
+                                                (child.tagName.toLowerCase() === 'div' && child.classList.contains('math-display')) ||
+                                                (child.parentElement && child.parentElement.classList.contains('katex-display'));
                                 
                                 const latex = annotation.textContent;
-                                text += isBlock ? `$$${latex}$$` : `$${latex}$`;
+                                text += isBlock ? `\n$$\n${latex}\n$$\n` : `$${latex.replace(/\n/g, ' ')}$`;
                                 break; // Skip default recursion for this node
                             }
                         }
@@ -155,7 +157,7 @@ class MarkdownConverter {
                     case 'math': // fallback if we hit a raw math tag not wrapped in known katex structure
                          const annotation = child.querySelector('annotation[encoding="application/x-tex"]');
                          if (annotation) {
-                             text += `$${annotation.textContent}$`;
+                                                           text += `$${annotation.textContent}$`;
                          } else {
                              // Fallback to text content if no latex found (unlikely in this context but safe)
                              text += child.textContent;
