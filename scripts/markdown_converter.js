@@ -134,8 +134,33 @@ class MarkdownConverter {
                     case 'span':
                     case 'section':
                     case 'article':
+                        // Check for KaTeX math
+                        if (child.classList && child.classList.contains('katex')) {
+                            const annotation = child.querySelector('annotation[encoding="application/x-tex"]');
+                            if (annotation) {
+                                // Check if it's block math (often displayed as block - this is a heuristic)
+                                // Standard KaTeX generic is usually inline, but let's check display style
+                                // simpler: ChatGPT treats \[ ... \] as display and \( ... \) as inline usually, 
+                                // but here we are extracting from DOM.
+                                // If it's a div.katex-display, use $$.
+                                const isBlock = child.classList.contains('katex-display') || (child.tagName.toLowerCase() === 'div' && child.classList.contains('math-display'));
+                                
+                                const latex = annotation.textContent;
+                                text += isBlock ? `$$${latex}$$` : `$${latex}$`;
+                                break; // Skip default recursion for this node
+                            }
+                        }
                         text += this.domToMarkdown(child);
                         break;
+                    case 'math': // fallback if we hit a raw math tag not wrapped in known katex structure
+                         const annotation = child.querySelector('annotation[encoding="application/x-tex"]');
+                         if (annotation) {
+                             text += `$${annotation.textContent}$`;
+                         } else {
+                             // Fallback to text content if no latex found (unlikely in this context but safe)
+                             text += child.textContent;
+                         }
+                         break;
                     default:
                         text += this.domToMarkdown(child);
                 }
