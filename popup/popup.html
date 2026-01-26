@@ -76,38 +76,56 @@
         <div id="settings-panel" class="settings-panel hidden">
             <div class="settings-header">
                 <h2>Configuration</h2>
-                <button id="close-settings" class="icon-btn">✕</button>
+                <button id="close-settings" class="icon-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
             </div>
 
-            <div class="input-group">
-                <label>Default Save Folder</label>
-                <div style="display: flex; gap: 8px;">
-                    <button id="select-folder-btn" class="secondary-btn" style="flex: 1; padding: 6px;">Choose
-                        Folder</button>
-                    <button id="clear-folder-btn" class="icon-btn" style="display: none;">🗑️</button>
+            <div class="settings-content">
+                <div class="input-group">
+                    <label>Default Save Folder</label>
+                    <div style="display: flex; gap: 8px;">
+                        <button id="select-folder-btn" class="secondary-btn" style="flex: 1;">Choose Folder</button>
+                        <button id="clear-folder-btn" class="icon-btn"
+                            style="display: none; color: var(--danger-color);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path
+                                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                </path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="folder-name"
+                        style="font-family: monospace; font-size: 11px; margin-top: 8px; color: var(--accent-color); word-break: break-all;">
+                        Not selected</div>
                 </div>
-                <div id="folder-name"
-                    style="font-family: monospace; font-size: 11px; margin-top: 4px; color: var(--accent-color);">Not
-                    selected</div>
-            </div>
 
-            <div class="input-group">
-                <label for="filename-pattern">Filename Pattern</label>
-                <input type="text" id="filename-pattern" placeholder="{title}_{date}.md">
-                <p class="help-text">Variables: {title}, {date}, {time}, {id}</p>
-            </div>
+                <div class="input-group">
+                    <label for="filename-pattern">Filename Pattern</label>
+                    <input type="text" id="filename-pattern" placeholder="{title}_{date}.md">
+                    <p class="help-text">Variables: {title}, {date}, {time}, {id}</p>
+                </div>
 
-            <div class="input-group">
-                <label for="frontmatter-template">Frontmatter (YAML)</label>
-                <textarea id="frontmatter-template" rows="5"></textarea>
-            </div>
+                <div class="input-group">
+                    <label for="frontmatter-template">Frontmatter (YAML)</label>
+                    <textarea id="frontmatter-template" rows="6"
+                        placeholder="---&#10;title: {title}&#10;url: {url}&#10;---"></textarea>
+                </div>
 
-            <div style="margin-top: auto; display: flex; gap: 8px;">
-                <button id="export-settings-btn" class="secondary-btn" style="padding: 8px; font-size: 12px;">Export
-                    JSON</button>
-                <button id="import-settings-btn" class="secondary-btn" style="padding: 8px; font-size: 12px;">Import
-                    JSON</button>
-                <input type="file" id="import-file-input" accept=".json" style="display: none;">
+                <div class="btn-group">
+                    <button id="export-settings-btn" class="secondary-btn">Export Settings JSON</button>
+                    <div style="position:relative;">
+                        <button id="import-settings-btn" class="secondary-btn">Import Settings JSON</button>
+                        <input type="file" id="import-file-input" accept=".json"
+                            style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;">
+                    </div>
+                </div>
             </div>
         </div>
     </div>

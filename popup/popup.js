@@ -199,9 +199,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Import Settings
-    importBtn.addEventListener('click', () => {
-        importFileInput.click();
-    });
+    // Note: The input is now overlaying the button, so we don't need a click listener on the button.
+    // importBtn.addEventListener('click', () => { importFileInput.click(); });
 
     importFileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
@@ -233,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const date = new Date();
         const dateStr = date.toISOString().split('T')[0];
         const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
-        const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
+        const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim().substring(0, 100);
 
         let filename = pattern
             .replace('{title}', safeTitle)
@@ -321,8 +320,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(() => statusMsg.textContent = '', 3000);
                 resolve();
              } catch (e) {
-                 console.error(e);
-                 statusMsg.textContent = 'Write error: ' + e.message;
+                 console.error("Save Error:", e);
+                 if (e.name === 'InvalidStateError') {
+                      statusMsg.textContent = 'Error: Folder access lost. Please re-select folder.';
+                      // Optionally clear the stale handle
+                      // await clearDirHandle(); 
+                 } else if (e.name === 'NotAllowedError') {
+                      statusMsg.textContent = 'Error: Permission denied. Re-select folder.';
+                 } else {
+                      statusMsg.textContent = 'Write error: ' + e.message;
+                 }
                  reject(e);
              }
         });
@@ -362,6 +369,7 @@ function dataURItoBlob(dataURI) {
                             }
 
                             // 2. Open Directory Picker
+                            // Use try/catch to handle user cancellation
                             const finalDirHandle = await window.showDirectoryPicker({
                                 id: 'save-folder-picker',
                                 startIn: startInHandle,

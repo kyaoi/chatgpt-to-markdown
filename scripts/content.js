@@ -12,46 +12,81 @@ let bulkUI = null;
 function createBulkUI(initialState = null) {
     if (bulkUI) return;
 
-    // Inject styles (matching popup/style.css)
+    // Inject styles (Modern / Glassmorphism)
     const style = document.createElement('style');
     style.textContent = `
         :root {
-            --ctm-bg: #343541;
-            --ctm-card: #202123;
+            --ctm-bg: #202123;
+            --ctm-card: #2d2f33; /* Slightly lighter for contrast */
             --ctm-text: #ececf1;
-            --ctm-sub: #acacbe;
+            --ctm-sub: #8e8ea0;
             --ctm-accent: #10a37f;
-            --ctm-border: #565869;
-            --ctm-radius: 6px;
+            --ctm-accent-hover: #1a7f64;
+            --ctm-border: #4d4d4f;
+            --ctm-danger: #ef4146;
+            --ctm-radius: 8px;
+            --ctm-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            --ctm-font: 'Söhne', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         }
         #chatgpt-to-md-bulk-panel {
-            position: fixed; bottom: 20px; right: 20px; width: 320px;
-            background: var(--ctm-card); color: var(--ctm-text);
-            border: 1px solid var(--ctm-border); border-radius: 8px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 9999;
-            font-family: 'Inter', Söhne, sans-serif; font-size: 14px;
+            position: fixed; bottom: 24px; right: 24px; width: 360px;
+            background: var(--ctm-bg); color: var(--ctm-text);
+            border: 1px solid var(--ctm-border); border-radius: var(--ctm-radius);
+            box-shadow: var(--ctm-shadow); z-index: 10000;
+            font-family: var(--ctm-font); font-size: 14px;
             display: flex; flex-direction: column; overflow: hidden;
-            transition: opacity 0.3s;
+            transition: all 0.3s ease; opacity: 0; transform: translateY(20px);
+            animation: ctm-slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes ctm-slide-up {
+            to { opacity: 1; transform: translateY(0); }
         }
         #chatgpt-to-md-bulk-header {
-            background: var(--ctm-bg); padding: 12px 16px;
+            background: rgba(255,255,255,0.03); padding: 16px;
             border-bottom: 1px solid var(--ctm-border);
             display: flex; justify-content: space-between; align-items: center;
         }
-        #chatgpt-to-md-bulk-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        #chatgpt-to-md-bulk-header h3 {
+             margin: 0; font-size: 14px; font-weight: 600; color: #fff;
+        }
+        #chatgpt-to-md-bulk-body { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
         .ctm-btn {
-            border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;
-            font-weight: 500; font-size: 13px; width: 100%; transition: opacity 0.2s;
+            border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer;
+            font-weight: 500; font-size: 13px; width: 100%;
+            transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
         }
-        .ctm-btn:hover { opacity: 0.9; }
+        .ctm-btn:active { transform: scale(0.98); }
         .ctm-primary { background: var(--ctm-accent); color: white; }
-        .ctm-danger { background: #be1f2a; color: white; }
+        .ctm-primary:hover { background: var(--ctm-accent-hover); }
+        .ctm-danger { background: var(--ctm-danger); color: white; }
+        .ctm-danger:hover { opacity: 0.9; }
         .ctm-secondary { background: transparent; border: 1px solid var(--ctm-border); color: var(--ctm-text); }
+        .ctm-secondary:hover { background: rgba(255,255,255,0.05); border-color: #6e6e80; }
+        
         .ctm-select {
-            width: 100%; padding: 8px; background: #40414f;
+            width: 100%; padding: 10px; background: #343541;
             border: 1px solid var(--ctm-border); color: var(--ctm-text);
-            border-radius: 4px; outline: none;
+            border-radius: 6px; outline: none; appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8ea0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat; background-position: right 10px center; background-size: 16px;
         }
+        .ctm-select:focus { border-color: var(--ctm-accent); }
+
+        .ctm-label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 500; color: var(--ctm-sub); }
+
+        #bulk-status-container {
+             background: #1a1b1e; border-radius: 6px; padding: 12px; border: 1px solid var(--ctm-border);
+        }
+        #bulk-status-text {
+            font-family: 'Before-Mono', menlo, monospace; font-size: 11px; 
+            white-space: pre-wrap; color: var(--ctm-text); 
+            min-height: 60px; max-height: 150px; overflow-y: auto;
+            line-height: 1.5;
+        }
+        /* Scrollbar */
+        #bulk-status-text::-webkit-scrollbar { width: 6px; }
+        #bulk-status-text::-webkit-scrollbar-track { background: transparent; }
+        #bulk-status-text::-webkit-scrollbar-thumb { background: #565869; border-radius: 3px; }
     `;
     document.head.appendChild(style);
 
@@ -59,24 +94,31 @@ function createBulkUI(initialState = null) {
     div.id = 'chatgpt-to-md-bulk-panel';
     div.innerHTML = `
         <div id="chatgpt-to-md-bulk-header">
-            <h3 style="margin:0; font-size:14px; font-weight:600;">Bulk Export</h3>
-            <button id="bulk-close-btn" style="background:none; border:none; color:var(--ctm-sub); cursor:pointer;">✕</button>
+            <h3>Export Manager</h3>
+            <button id="bulk-close-btn" style="background:none; border:none; color:var(--ctm-sub); cursor:pointer; font-size:18px; line-height:1;">&times;</button>
         </div>
         <div id="chatgpt-to-md-bulk-body">
             <div id="bulk-controls">
-                <label style="display:block; margin-bottom:4px; font-size:11px; color:var(--ctm-sub);">Source</label>
-                <select id="bulk-project-select" class="ctm-select">
-                    <option value="" disabled selected>Loading...</option>
-                </select>
-                <div style="margin-top: 12px;">
-                    <button id="bulk-start-btn" class="ctm-btn ctm-primary">Start Export</button>
+                <div>
+                    <label class="ctm-label">Source Project / Context</label>
+                    <select id="bulk-project-select" class="ctm-select">
+                        <option value="" disabled selected>Loading...</option>
+                    </select>
+                </div>
+                <div style="margin-top: 20px;">
+                    <button id="bulk-start-btn" class="ctm-btn ctm-primary">
+                        <span>Start Export</span>
+                    </button>
                 </div>
             </div>
 
             <div id="bulk-status-container" style="display: none;">
-                 <div id="bulk-status-text" style="font-family:monospace; font-size:12px; white-space:pre-wrap; color:var(--ctm-text); margin-bottom:12px; min-height:40px;">Initializing...</div>
-                 <button id="bulk-stop-btn" class="ctm-btn ctm-danger">Stop</button>
-                 <button id="bulk-save-btn" class="ctm-btn ctm-primary" style="display:none;">Finalize & Save All</button>
+                 <label class="ctm-label">Status Log</label>
+                 <div id="bulk-status-text">Initializing...</div>
+                 <div style="display:flex; gap:10px; margin-top:12px;">
+                    <button id="bulk-stop-btn" class="ctm-btn ctm-danger">Stop</button>
+                    <button id="bulk-save-btn" class="ctm-btn ctm-primary" style="display:none; width:100%;">Finalize & Save</button>
+                 </div>
             </div>
         </div>
     `;
@@ -86,8 +128,12 @@ function createBulkUI(initialState = null) {
 
     // Event Listeners
     div.querySelector('#bulk-close-btn').addEventListener('click', () => {
-        div.remove();
-        bulkUI = null;
+        div.style.opacity = '0';
+        div.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+            div.remove();
+            bulkUI = null;
+        }, 300);
     });
 
     div.querySelector('#bulk-start-btn').addEventListener('click', startNewExport);
@@ -137,7 +183,7 @@ function showFinishedState(state) {
     if (projectSelect) projectSelect.style.display = 'none';
     if (statusContainer) statusContainer.style.display = 'block';
     if (stopBtn) stopBtn.style.display = 'none';
-    if (saveBtn) saveBtn.style.display = 'block';
+    if (saveBtn) saveBtn.style.display = 'flex'; // flex for valid layout
 
     const count = Object.keys(state.results || {}).length;
     if (statusText) statusText.textContent = `Completed!\nReady to save ${count} files.\nPress 'Finalize' to write to disk.`;
@@ -503,9 +549,11 @@ async function saveAllToDisk() {
         let saved = 0;
         
         for (const file of results) {
+            // FIX: Hoist finalContent here so it's accessible in catch block
+            let finalContent = file.content;
+            
             try {
                 // --- Image Extraction & Externalization ---
-                let finalContent = file.content;
                 const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
                 
                 // Find all matches
@@ -520,9 +568,6 @@ async function saveAllToDisk() {
                         const ext = match[3] === 'jpeg' ? 'jpg' : match[3]; // png, jpeg, etc
                         
                         // Generate simplified image filename
-                        // Use chat ID + index to ensure uniqueness across files
-                        // Or use hash? Index is simpler.
-                        // file.filename is like "Title_Date.md". Let's use "Title_Date_img1.png"
                         const baseName = file.filename.replace('.md', '');
                         const imgFilename = `${baseName}_img${imgCount}.${ext}`;
                         
@@ -536,14 +581,12 @@ async function saveAllToDisk() {
                         await writable.close();
                         
                         // Replace in Markdown (Use relative path)
-                        // Note: Replace string *safely* (replace only this instance)
-                        // Since we iterate matches, we can use exact match string? 
-                        // Be careful if same base64 appears twice (dedup handled in converter, but if it remains...)
                         finalContent = finalContent.replace(fullMatch, `![${alt}](images/${imgFilename})`);
                         
                         imgCount++;
                     } catch (imgErr) {
                         console.error("Failed to save extracted image", imgErr);
+                        // Log but continue, maybe content stays base64?
                     }
                 }
                 // ------------------------------------------
@@ -583,6 +626,7 @@ async function saveAllToDisk() {
                     const safeName = `${state.results[Object.keys(state.results).find(k => state.results[k] === file)]?.id || Date.now()}.md`; 
                     const fileHandle = await dirHandle.getFileHandle(safeName, { create: true });
                     const writable = await fileHandle.createWritable();
+                    // Fix: finalContent is now available here
                     await writable.write(`<!-- Original Title: ${file.frontmatterData?.title || 'Unknown'} -->\n` + finalContent); 
                     await writable.close();
                     saved++;
