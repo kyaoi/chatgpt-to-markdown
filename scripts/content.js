@@ -12,51 +12,71 @@ let bulkUI = null;
 function createBulkUI(initialState = null) {
     if (bulkUI) return;
 
+    // Inject styles (matching popup/style.css)
+    const style = document.createElement('style');
+    style.textContent = `
+        :root {
+            --ctm-bg: #343541;
+            --ctm-card: #202123;
+            --ctm-text: #ececf1;
+            --ctm-sub: #acacbe;
+            --ctm-accent: #10a37f;
+            --ctm-border: #565869;
+            --ctm-radius: 6px;
+        }
+        #chatgpt-to-md-bulk-panel {
+            position: fixed; bottom: 20px; right: 20px; width: 320px;
+            background: var(--ctm-card); color: var(--ctm-text);
+            border: 1px solid var(--ctm-border); border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 9999;
+            font-family: 'Inter', Söhne, sans-serif; font-size: 14px;
+            display: flex; flex-direction: column; overflow: hidden;
+            transition: opacity 0.3s;
+        }
+        #chatgpt-to-md-bulk-header {
+            background: var(--ctm-bg); padding: 12px 16px;
+            border-bottom: 1px solid var(--ctm-border);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        #chatgpt-to-md-bulk-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .ctm-btn {
+            border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer;
+            font-weight: 500; font-size: 13px; width: 100%; transition: opacity 0.2s;
+        }
+        .ctm-btn:hover { opacity: 0.9; }
+        .ctm-primary { background: var(--ctm-accent); color: white; }
+        .ctm-danger { background: #be1f2a; color: white; }
+        .ctm-secondary { background: transparent; border: 1px solid var(--ctm-border); color: var(--ctm-text); }
+        .ctm-select {
+            width: 100%; padding: 8px; background: #40414f;
+            border: 1px solid var(--ctm-border); color: var(--ctm-text);
+            border-radius: 4px; outline: none;
+        }
+    `;
+    document.head.appendChild(style);
+
     const div = document.createElement('div');
     div.id = 'chatgpt-to-md-bulk-panel';
-    div.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 350px;
-        background: #202123;
-        color: #ececf1;
-        border: 1px solid #565869;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-        z-index: 9999;
-        font-family: Söhne, ui-sans-serif, system-ui, -apple-system, sans-serif;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-    `;
-
     div.innerHTML = `
-        <div style="padding: 12px 16px; border-bottom: 1px solid #565869; display: flex; justify-content: space-between; align-items: center; background: #343541;">
-            <h3 style="margin: 0; font-size: 14px; font-weight: 600;">Bulk Export (V2)</h3>
-            <button id="bulk-close-btn" style="background: none; border: none; color: #acacbe; cursor: pointer; padding: 4px;">✕</button>
+        <div id="chatgpt-to-md-bulk-header">
+            <h3 style="margin:0; font-size:14px; font-weight:600;">Bulk Export</h3>
+            <button id="bulk-close-btn" style="background:none; border:none; color:var(--ctm-sub); cursor:pointer;">✕</button>
         </div>
-        <div style="padding: 16px; display: flex; flex-direction: column; gap: 12px; font-size: 14px;">
+        <div id="chatgpt-to-md-bulk-body">
             <div id="bulk-controls">
-                <!-- Project Selector -->
-                <div>
-                    <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #acacbe;">Project / Workspace</label>
-                    <select id="bulk-project-select" style="width: 100%; padding: 6px; background: #40414f; border: 1px solid #565869; color: #fff; border-radius: 4px;">
-                        <option value="" disabled selected>Loading projects...</option>
-                    </select>
-                </div>
-
-                <!-- Actions -->
-                <div style="display: flex; gap: 8px; margin-top: 8px;">
-                    <button id="bulk-start-btn" style="flex: 1; padding: 8px; background: #10a37f; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: 600;">Start Export</button>
+                <label style="display:block; margin-bottom:4px; font-size:11px; color:var(--ctm-sub);">Source</label>
+                <select id="bulk-project-select" class="ctm-select">
+                    <option value="" disabled selected>Loading...</option>
+                </select>
+                <div style="margin-top: 12px;">
+                    <button id="bulk-start-btn" class="ctm-btn ctm-primary">Start Export</button>
                 </div>
             </div>
 
-            <!-- Running/Resume Status -->
             <div id="bulk-status-container" style="display: none;">
-                 <p id="bulk-status-text" style="font-family: monospace; font-size: 12px; white-space: pre-wrap; margin: 0 0 8px 0;">Running...</p>
-                 <button id="bulk-stop-btn" style="width: 100%; padding: 8px; background: #be1f2a; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: 600;">Stop</button>
-                 <button id="bulk-save-btn" style="display: none; width: 100%; padding: 8px; background: #10a37f; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: 600;">Finalize & Save All</button>
+                 <div id="bulk-status-text" style="font-family:monospace; font-size:12px; white-space:pre-wrap; color:var(--ctm-text); margin-bottom:12px; min-height:40px;">Initializing...</div>
+                 <button id="bulk-stop-btn" class="ctm-btn ctm-danger">Stop</button>
+                 <button id="bulk-save-btn" class="ctm-btn ctm-primary" style="display:none;">Finalize & Save All</button>
             </div>
         </div>
     `;
