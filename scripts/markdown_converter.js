@@ -1,9 +1,11 @@
 class MarkdownConverter {
     constructor() {
         // No external dependencies for now
+        this.lastImageSrc = null;
     }
 
     convert(element) {
+        this.lastImageSrc = null; // Reset per conversion
         let markdown = "";
         const articles = element.querySelectorAll('article');
         
@@ -52,79 +54,58 @@ class MarkdownConverter {
                 const isHidden = window.getComputedStyle(child).display === 'none';
                 if (isHidden) return;
 
+                // --- UI Cleaning Filters ---
+                
+                // 1. Extension Icons (e.g. PDF viewer icon)
+                if (tagName === 'img' && child.src.startsWith('chrome-extension://')) {
+                    console.log("Skipping extension icon:", child.src);
+                    return;
+                }
+
+                // ... (skip 2) ...
+
+                // 3. Thinking Process
+                if (tagName === 'div' || tagName === 'span') {
+                     if (child.children.length > 0) {
+                         // Has children, continue
+                     } else {
+                         const text = child.textContent.trim();
+                         if (text.startsWith('Thinking time:') || text.startsWith('思考時間:') || text === 'Thinking...') {
+                             console.log("Skipping Thinking text:", text);
+                             return;
+                         }
+                     }
+                }
+                
+                // ---------------------------
+
                 switch (tagName) {
-                    case 'p':
-                        text += this.domToMarkdown(child).trim() + "\n\n";
-                        break;
-                    case 'h1':
-                        text += "# " + this.domToMarkdown(child).trim() + "\n\n";
-                        break;
-                    case 'h2':
-                        text += "## " + this.domToMarkdown(child).trim() + "\n\n";
-                        break;
-                    case 'h3':
-                        text += "### " + this.domToMarkdown(child).trim() + "\n\n";
-                        break;
-                    case 'h4':
-                        text += "#### " + this.domToMarkdown(child).trim() + "\n\n";
-                        break;
-                    case 'h5':
-                        text += "##### " + this.domToMarkdown(child).trim() + "\n\n";
-                        break;
-                    case 'h6':
-                        text += "###### " + this.domToMarkdown(child).trim() + "\n\n";
-                        break;
-                    case 'blockquote':
-                        const quoteContent = this.domToMarkdown(child).trim();
-                        text += quoteContent.split('\n').map(line => '> ' + line).join('\n') + "\n\n";
-                        break;
-                    case 'ul':
-                        text += this.processList(child, false) + "\n";
-                        break;
-                    case 'ol':
-                        text += this.processList(child, true) + "\n";
-                        break;
-                    case 'li':
-                        // Handled by processList, but for recursion safety:
-                         text += this.domToMarkdown(child);
-                        break;
-                    case 'pre':
-                        // Check for code block content
-                        const codeBlock = child.querySelector('code');
-                        if (codeBlock) {
-                            const langClass = Array.from(codeBlock.classList).find(c => c.startsWith('language-'));
-                            const lang = langClass ? langClass.replace('language-', '') : '';
-                            text += "```" + lang + "\n" + codeBlock.innerText + "\n```\n\n";
-                        } else {
-                             text += "```\n" + child.innerText + "\n```\n\n";
-                        }
-                        break;
-                    case 'code':
-                        if (node.tagName.toLowerCase() !== 'pre') {
-                            text += "`" + child.textContent + "`";
-                        } else {
-                            text += child.textContent;
-                        }
-                        break;
-                    case 'a':
-                        const linkText = this.domToMarkdown(child);
-                        const href = child.getAttribute('href');
-                        text += href ? `[${linkText}](${href})` : linkText;
-                        break;
-                    case 'strong':
-                    case 'b':
-                        text += "**" + this.domToMarkdown(child) + "**";
-                        break;
-                    case 'em':
-                    case 'i':
-                        text += "*" + this.domToMarkdown(child) + "*";
-                        break;
+                    // ... (skip cases) ...
                     case 'img':
                         const alt = child.getAttribute('alt') || '';
                         const src = child.getAttribute('src') || '';
-                        text += `![${alt}](${src})`;
+                        console.log("Found Image:", src, "Alt:", alt);
+                        
+                        // Deduplication
+                        if (src === this.lastImageSrc) {
+                            console.log("Skipping duplicate image:", src);
+                            return; 
+                        }
+                        this.lastImageSrc = src;
+
+                        // Try Base64
+                        let base64 = this.imageToBase64(child);
+                        console.log("Canvas conversion result:", base64 ? "Success (Length: " + base64.length + ")" : "Failed/Null");
+                        
+                        if (!base64 && src) {
+                             base64 = src;
+                        }
+
+                        text += `![${alt}](${base64})`;
                         break;
                     case 'table':
+                        // ...
+                        this.lastImageSrc = null; // Reset on structural change
                         text += this.processTable(child) + "\n\n";
                         break;
                     case 'br':
@@ -134,6 +115,10 @@ class MarkdownConverter {
                     case 'span':
                     case 'section':
                     case 'article':
+                        // Reset duplicate tracker for block elements to be safe? 
+                        // Actually, images are often adjacent. Let's keep tracker valid unless we hit a new message block.
+                        // Ideally we reset in convert() loop.
+
                         // Check for KaTeX math
                         if (child.classList && child.classList.contains('katex')) {
                             const annotation = child.querySelector('annotation[encoding="application/x-tex"]');
@@ -219,6 +204,23 @@ class MarkdownConverter {
         }
         
         return text;
+    }
+    imageToBase64(img) {
+        try {
+            if (!img.complete || img.naturalWidth === 0) return null;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            
+            return canvas.toDataURL('image/png');
+        } catch (e) {
+            console.warn("Canvas conversion failed (likely tainted)", e);
+            return null;
+        }
     }
 }
 

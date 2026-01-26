@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectFolderBtn = document.getElementById('select-folder-btn');
     const folderNameDisplay = document.getElementById('folder-name');
     const clearFolderBtn = document.getElementById('clear-folder-btn');
+    const launchBulkBtn = document.getElementById('launch-bulk-btn');
     // subfolder-name removed
     const frontmatterInput = document.getElementById('frontmatter-template');
     const subfolderInput = document.getElementById('subfolder-name'); // Might be null but ID exists? Check HTML. input removed?
@@ -272,23 +273,74 @@ document.addEventListener('DOMContentLoaded', () => {
                      finalMarkdown = frontmatter + rawMarkdown;
                  }
     
-                 try {
-                    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(finalMarkdown);
-                    await writable.close();
-    
-                    statusMsg.textContent = `Saved to ${dirHandle.name}!`;
-                    setTimeout(() => statusMsg.textContent = '', 3000);
-                    resolve();
-                 } catch (e) {
-                     console.error(e);
-                     statusMsg.textContent = 'Write error: ' + e.message;
-                     reject(e);
-                 }
-            });
+             try {
+                // --- Image Extraction Logic (Ported from content.js) ---
+                const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
+                const matches = [...finalMarkdown.matchAll(imgRegex)];
+                
+                if (matches.length > 0) {
+                    try {
+                        const imagesDir = await dirHandle.getDirectoryHandle('images', { create: true });
+                        let imgCount = 0;
+                        const baseName = filename.replace('.md', '');
+
+                        for (const match of matches) {
+                            try {
+                                const fullMatch = match[0];
+                                const alt = match[1];
+                                const dataURI = match[2];
+                                const ext = match[3] === 'jpeg' ? 'jpg' : match[3];
+                                
+                                const imgFilename = `${baseName}_img${imgCount}.${ext}`;
+                                const blob = dataURItoBlob(dataURI);
+                                
+                                const imgHandle = await imagesDir.getFileHandle(imgFilename, { create: true });
+                                const writable = await imgHandle.createWritable();
+                                await writable.write(blob);
+                                await writable.close();
+                                
+                                finalMarkdown = finalMarkdown.replace(fullMatch, `![${alt}](images/${imgFilename})`);
+                                imgCount++;
+                            } catch (imgErr) {
+                                console.error("Popup: Failed to save extracted image", imgErr);
+                            }
+                        }
+                    } catch (dirErr) {
+                        console.error("Popup: Failed to create images directory", dirErr);
+                        statusMsg.textContent = 'Warning: Could not save images.';
+                    }
+                }
+                // -------------------------------------------------------
+
+                const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(finalMarkdown);
+                await writable.close();
+
+                statusMsg.textContent = `Saved to ${dirHandle.name}!`;
+                setTimeout(() => statusMsg.textContent = '', 3000);
+                resolve();
+             } catch (e) {
+                 console.error(e);
+                 statusMsg.textContent = 'Write error: ' + e.message;
+                 reject(e);
+             }
         });
+    });
+}
+
+// Helper: Convert Base64 DataURI to Blob (Duplicate from content.js for standalone popup)
+function dataURItoBlob(dataURI) {
+    const byteString = atob(dataURI.split(',')[1]);
+    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
     }
+    return new Blob([ab], {type: mimeString});
+}
+
 
     // Event Listeners
 
@@ -350,6 +402,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             } else {
                 statusMsg.textContent = 'Please open a ChatGPT conversation.';
+            }
+        });
+    });
+
+    launchBulkBtn.addEventListener('click', () => {
+        chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+            if (tabs[0].url && (tabs[0].url.includes('chatgpt.com') || tabs[0].url.includes('chat.openai.com'))) {
+                chrome.tabs.sendMessage(tabs[0].id, {action: 'show_bulk_ui'}, (response) => {
+                     if (chrome.runtime.lastError) {
+                         statusMsg.textContent = 'Error: ' + chrome.runtime.lastError.message;
+                     } else {
+                         window.close(); // Close popup so user can use the injected UI
+                     }
+                });
+            } else {
+                statusMsg.textContent = 'Open ChatGPT first.';
             }
         });
     });
