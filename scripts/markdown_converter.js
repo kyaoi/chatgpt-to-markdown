@@ -149,7 +149,7 @@ class MarkdownConverter {
                                                 (child.parentElement && child.parentElement.classList.contains('katex-display'));
                                 
                                 const latex = annotation.textContent;
-                                text += isBlock ? `\n$$\n${latex}\n$$\n` : `$${latex.replace(/\n/g, ' ')}$`;
+                                text += isBlock ? `\n$$\n${latex}\n$$\n` : `$${latex.replace(/\n/g, ' ').trim()}$`;
                                 break; // Skip default recursion for this node
                             }
                         }
@@ -161,7 +161,7 @@ class MarkdownConverter {
                     case 'math': // fallback if we hit a raw math tag not wrapped in known katex structure
                          const annotation = child.querySelector('annotation[encoding="application/x-tex"]');
                          if (annotation) {
-                                                           text += `$${annotation.textContent}$`;
+                                                           text += `$${annotation.textContent.trim()}$`;
                          } else {
                              // Fallback to text content if no latex found (unlikely in this context but safe)
                              text += child.textContent;
@@ -174,7 +174,7 @@ class MarkdownConverter {
                         break;
                     case 'blockquote':
                         const quoteContent = this.domToMarkdown(child).trim();
-                        text += quoteContent.split('\n').map(line => `> ${line}`).join('\n') + "\n\n";
+                        text += "\n" + quoteContent.split('\n').filter(l => l.trim()).map(line => `> ${line}`).join('\n') + "\n\n";
                         break;
                     default:
                         text += this.domToMarkdown(child);
