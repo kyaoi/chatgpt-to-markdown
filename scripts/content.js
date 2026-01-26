@@ -183,10 +183,25 @@ function showFinishedState(state) {
     if (projectSelect) projectSelect.style.display = 'none';
     if (statusContainer) statusContainer.style.display = 'block';
     if (stopBtn) stopBtn.style.display = 'none';
-    if (saveBtn) saveBtn.style.display = 'flex'; // flex for valid layout
+    if (saveBtn) saveBtn.style.display = 'flex';
+
+    // Add Tags Input if not present
+    let tagsContainer = document.getElementById('bulk-tags-container');
+    if (!tagsContainer) {
+        tagsContainer = document.createElement('div');
+        tagsContainer.id = 'bulk-tags-container';
+        tagsContainer.style.marginTop = '12px';
+        tagsContainer.innerHTML = `
+            <label class="ctm-label">Tags (Common for all files)</label>
+            <input type="text" id="bulk-tags-input" class="ctm-select" placeholder="e.g. AI, {date}" style="cursor:text; padding:8px;" value="${state.settings.defaultTags || ''}">
+            <p style="font-size:10px; color:var(--ctm-sub); margin:4px 0 0;">Variables allowed: {title}, {date}...</p>
+        `;
+        // Insert before buttons
+        saveBtn.parentElement.before(tagsContainer);
+    }
 
     const count = Object.keys(state.results || {}).length;
-    if (statusText) statusText.textContent = `Completed!\nReady to save ${count} files.\nPress 'Finalize' to write to disk.`;
+    if (statusText) statusText.textContent = `Completed!\nReady to save ${count} files.\nCustomize tags below if needed.`;
 }
 
 
@@ -229,7 +244,7 @@ async function startNewExport() {
     const projectId = document.getElementById('bulk-project-select').value;
     
     // 1. Get Settings
-    const settings = await chrome.storage.sync.get(['filenamePattern', 'frontmatterTemplate']);
+    const settings = await chrome.storage.sync.get(['filenamePattern', 'frontmatterTemplate', 'defaultTags']);
     
     // 2. Prepare State
     const state = {
@@ -241,7 +256,8 @@ async function startNewExport() {
         errors: 0,
         settings: {
             filenamePattern: settings.filenamePattern || '{title}_{date}_{time}',
-            frontmatterTemplate: settings.frontmatterTemplate || ''
+            frontmatterTemplate: settings.frontmatterTemplate || '',
+            defaultTags: settings.defaultTags || '' // Store default tags here
         },
         mode: 'initializing' // initializing -> scanning -> processing -> finished
     };
@@ -537,6 +553,10 @@ async function saveAllToDisk() {
     const state = data.automationState;
     if (!state || !state.results) return;
     
+    // Get custom tags from UI if available
+    const tagsInput = document.getElementById('bulk-tags-input');
+    const customTags = tagsInput ? tagsInput.value : (state.settings.defaultTags || '');
+
     try {
         const dirHandle = await window.showDirectoryPicker();
         const folderName = dirHandle.name;
@@ -554,51 +574,55 @@ async function saveAllToDisk() {
             
             try {
                 // --- Image Extraction & Externalization ---
+                // ... (Existing Image Logic) ...
                 const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
-                
-                // Find all matches
                 const matches = [...finalContent.matchAll(imgRegex)];
                 let imgCount = 0;
                 
                 for (const match of matches) {
                     try {
                         const fullMatch = match[0];
-                        const alt = match[1]; // unused for filename but good to know
+                        const alt = match[1];
                         const dataURI = match[2];
-                        const ext = match[3] === 'jpeg' ? 'jpg' : match[3]; // png, jpeg, etc
+                        const ext = match[3] === 'jpeg' ? 'jpg' : match[3];
                         
-                        // Generate simplified image filename
                         const baseName = file.filename.replace('.md', '');
                         const imgFilename = `${baseName}_img${imgCount}.${ext}`;
                         
-                        // Convert to Blob
                         const blob = dataURItoBlob(dataURI);
                         
-                        // Write image file
                         const imgHandle = await imagesDir.getFileHandle(imgFilename, { create: true });
                         const writable = await imgHandle.createWritable();
                         await writable.write(blob);
                         await writable.close();
                         
-                        // Replace in Markdown (Use relative path)
                         finalContent = finalContent.replace(fullMatch, `![${alt}](images/${imgFilename})`);
-                        
                         imgCount++;
                     } catch (imgErr) {
                         console.error("Failed to save extracted image", imgErr);
-                        // Log but continue, maybe content stays base64?
                     }
                 }
                 // ------------------------------------------
 
                 // Apply Frontmatter if metadata exists
                 if (file.frontmatterData && state.settings.frontmatterTemplate) {
+                     // Tag Variable Substitution
+                     let fileTags = customTags
+                        .replace(/{title}/g, file.frontmatterData.title)
+                        .replace(/{date}/g, file.frontmatterData.date)
+                        .replace(/{time}/g, file.frontmatterData.time)
+                        .replace(/{folder}/g, folderName);
+                     
+                     // Format tags array [tag1, tag2]
+                     const tagArrayString = '[' + fileTags.split(',').map(t => t.trim()).filter(Boolean).join(', ') + ']';
+
                      let fm = state.settings.frontmatterTemplate
                         .replace(/{folder}/g, folderName)
                         .replace(/{title}/g, file.frontmatterData.title)
                         .replace(/{url}/g, file.frontmatterData.url)
                         .replace(/{date}/g, file.frontmatterData.date)
-                        .replace(/{time}/g, file.frontmatterData.time);
+                        .replace(/{time}/g, file.frontmatterData.time)
+                        .replace(/{tags}/g, tagArrayString); // Inject tags
                      finalContent = fm + finalContent;
                 }
 
@@ -609,24 +633,16 @@ async function saveAllToDisk() {
                 saved++;
                 if (saved % 5 === 0) updateStatusUI(`Saved ${saved}/${results.length}...`);
             } catch (e) {
+                // ... (Existing Error Handling) ...
                 console.error(`Write failed for ${file.filename}:`, e.name, e.message);
                 updateStatusUI(`Error: ${e.name} on ${file.filename.substring(0,20)}... Retrying...`);
                 
-                // Cleanup the empty file
-                try {
-                    await dirHandle.removeEntry(file.filename);
-                } catch (delErr) {
-                    console.warn("Cleanup failed:", delErr);
-                }
+                try { await dirHandle.removeEntry(file.filename); } catch (d) {}
 
                 try {
-                    // Fallback: Use simple ID filename
-                    // NOTE: Keep images/ links?? They might point to "OldName_img0.png".
-                    // That's fine, the image file exists.
                     const safeName = `${state.results[Object.keys(state.results).find(k => state.results[k] === file)]?.id || Date.now()}.md`; 
                     const fileHandle = await dirHandle.getFileHandle(safeName, { create: true });
                     const writable = await fileHandle.createWritable();
-                    // Fix: finalContent is now available here
                     await writable.write(`<!-- Original Title: ${file.frontmatterData?.title || 'Unknown'} -->\n` + finalContent); 
                     await writable.close();
                     saved++;

@@ -155,6 +155,9 @@ class MarkdownConverter {
                         }
                         text += this.domToMarkdown(child);
                         break;
+                    case 'button':
+                        // Ignore buttons (citation sources, etc.)
+                        break;
                     case 'math': // fallback if we hit a raw math tag not wrapped in known katex structure
                          const annotation = child.querySelector('annotation[encoding="application/x-tex"]');
                          if (annotation) {
@@ -164,6 +167,15 @@ class MarkdownConverter {
                              text += child.textContent;
                          }
                          break;
+                    case 'strong':
+                    case 'b':
+                        // Add spaces around ** markers as requested to prevent formatting bleed
+                        text += ` **${this.domToMarkdown(child)}** `;
+                        break;
+                    case 'blockquote':
+                        const quoteContent = this.domToMarkdown(child).trim();
+                        text += quoteContent.split('\n').map(line => `> ${line}`).join('\n') + "\n\n";
+                        break;
                     default:
                         text += this.domToMarkdown(child);
                 }

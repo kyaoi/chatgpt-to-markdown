@@ -21,7 +21,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const launchBulkBtn = document.getElementById('launch-bulk-btn');
     // subfolder-name removed
     const frontmatterInput = document.getElementById('frontmatter-template');
-    const subfolderInput = document.getElementById('subfolder-name'); // Might be null but ID exists? Check HTML. input removed?
+    const defaultTagsInput = document.getElementById('default-tags'); // Added missing definition
+    const subfolderInput = document.getElementById('subfolder-name'); 
+
+    // State
+    const DEFAULT_PATTERN = '{title}_{date}_{time}';
+    
+    // ...
+
+    // Default Frontmatter
+    const DEFAULT_FRONTMATTER = '';
+    const DEFAULT_TAGS = ''; // Added missing constant
     // In popup.html we removed subfolderName? Yes.
     // But `chrome.storage.sync.get... subfolderName` relies on it?
     // Line 76: get(['subfolderName'])
@@ -31,9 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // User requested "No input field". The "subfolder" logic was for the old mechanism.
     // I should likely remove subfolderInput related code too.
 
-
-    // State
-    const DEFAULT_PATTERN = '{title}_{date}_{time}';
 
     // State
     let currentTitle = '';
@@ -121,22 +128,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Default Frontmatter
-    const DEFAULT_FRONTMATTER = '';
-
     // Load settings
-    chrome.storage.sync.get(['filenamePattern', 'frontmatterTemplate'], async (result) => {
-        if (result.filenamePattern) {
-            filenameInput.value = result.filenamePattern;
-        } else {
-            filenameInput.value = DEFAULT_PATTERN;
-        }
-        
-        if (result.frontmatterTemplate !== undefined) {
-             frontmatterInput.value = result.frontmatterTemplate;
-        } else {
-             frontmatterInput.value = DEFAULT_FRONTMATTER;
-        }
+    chrome.storage.sync.get({
+        filenamePattern: DEFAULT_PATTERN,
+        frontmatterTemplate: DEFAULT_FRONTMATTER,
+        defaultTags: DEFAULT_TAGS
+    }, async (result) => {
+        filenameInput.value = result.filenamePattern;
+        frontmatterInput.value = result.frontmatterTemplate;
+        if (defaultTagsInput) defaultTagsInput.value = result.defaultTags;
         
         try {
             const handle = await getDirHandle();
@@ -153,7 +153,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function saveSettings() {
         chrome.storage.sync.set({
             filenamePattern: filenameInput.value,
-            frontmatterTemplate: frontmatterInput.value
+            frontmatterTemplate: frontmatterInput.value,
+            defaultTags: defaultTagsInput ? defaultTagsInput.value : DEFAULT_TAGS
         }, () => {
              // Re-init preview to reflect pattern changes
              initPreview();
@@ -162,6 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     filenameInput.addEventListener('input', saveSettings);
     frontmatterInput.addEventListener('input', saveSettings);
+    if (defaultTagsInput) defaultTagsInput.addEventListener('input', saveSettings);
 
     // selectFolderBtn listener
     selectFolderBtn.addEventListener('click', async () => {
@@ -248,93 +250,107 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function saveMarkdownDirect(rawMarkdown, title, url, dirHandle, filename) {
         return new Promise((resolve, reject) => {
-            chrome.storage.sync.get(['frontmatterTemplate'], async (result) => {
-                 const template = result.frontmatterTemplate !== undefined ? result.frontmatterTemplate : DEFAULT_FRONTMATTER;
-                 
+             // Retrieve defaults and template
+             chrome.storage.sync.get({
+                defaultTags: DEFAULT_TAGS,
+                frontmatterTemplate: DEFAULT_FRONTMATTER
+             }, async (settings) => {
                  let finalMarkdown = rawMarkdown;
-    
+                 const template = settings.frontmatterTemplate;
+                 const defaultTags = settings.defaultTags;
+                 
+                 // --- Frontmatter Processing ---
                  if (template && template.trim() !== '') {
                      const date = new Date();
                      const dateStr = date.toISOString().split('T')[0];
                      const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
                      const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
-        
-                     // displayFolderName = dirHandle.name
                      const displayFolderName = dirHandle.name;
-        
-                     let frontmatter = template
+
+                     // Variable Substitution for Tags
+                     let processedTags = defaultTags || '';
+                     processedTags = processedTags
+                             .replace(/{title}/g, safeTitle)
+                             .replace(/{date}/g, dateStr)
+                             .replace(/{time}/g, timeStr)
+                             .replace(/{folder}/g, displayFolderName);
+                     
+                     // Format tags as [tag1, tag2]
+                     const tagArrayString = '[' + processedTags.split(',').map(t => t.trim()).filter(Boolean).join(', ') + ']';
+
+                     const frontmatter = template
                         .replace(/{folder}/g, displayFolderName)
                         .replace(/{title}/g, safeTitle)
                         .replace(/{url}/g, url || '')
                         .replace(/{date}/g, dateStr)
-                        .replace(/{time}/g, timeStr);
+                        .replace(/{time}/g, timeStr)
+                        .replace(/{tags}/g, tagArrayString);
                      
                      finalMarkdown = frontmatter + rawMarkdown;
                  }
-    
-             try {
-                // --- Image Extraction Logic (Ported from content.js) ---
-                const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
-                const matches = [...finalMarkdown.matchAll(imgRegex)];
-                
-                if (matches.length > 0) {
-                    try {
-                        const imagesDir = await dirHandle.getDirectoryHandle('images', { create: true });
-                        let imgCount = 0;
-                        const baseName = filename.replace('.md', '');
 
-                        for (const match of matches) {
-                            try {
-                                const fullMatch = match[0];
-                                const alt = match[1];
-                                const dataURI = match[2];
-                                const ext = match[3] === 'jpeg' ? 'jpg' : match[3];
-                                
-                                const imgFilename = `${baseName}_img${imgCount}.${ext}`;
-                                const blob = dataURItoBlob(dataURI);
-                                
-                                const imgHandle = await imagesDir.getFileHandle(imgFilename, { create: true });
-                                const writable = await imgHandle.createWritable();
-                                await writable.write(blob);
-                                await writable.close();
-                                
-                                finalMarkdown = finalMarkdown.replace(fullMatch, `![${alt}](images/${imgFilename})`);
-                                imgCount++;
-                            } catch (imgErr) {
-                                console.error("Popup: Failed to save extracted image", imgErr);
+                 // --- File Writing Logic ---
+                 try {
+                    // Image Extraction
+                    const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
+                    const matches = [...finalMarkdown.matchAll(imgRegex)];
+                    
+                    if (matches.length > 0) {
+                        try {
+                            const imagesDir = await dirHandle.getDirectoryHandle('images', { create: true });
+                            let imgCount = 0;
+                            const baseName = filename.replace('.md', '');
+
+                            for (const match of matches) {
+                                try {
+                                    const fullMatch = match[0];
+                                    const alt = match[1];
+                                    const dataURI = match[2];
+                                    const ext = match[3] === 'jpeg' ? 'jpg' : match[3];
+                                    
+                                    const imgFilename = `${baseName}_img${imgCount}.${ext}`;
+                                    const blob = dataURItoBlob(dataURI);
+                                    
+                                    const imgHandle = await imagesDir.getFileHandle(imgFilename, { create: true });
+                                    const writable = await imgHandle.createWritable();
+                                    await writable.write(blob);
+                                    await writable.close();
+                                    
+                                    finalMarkdown = finalMarkdown.replace(fullMatch, `![${alt}](images/${imgFilename})`);
+                                    imgCount++;
+                                } catch (imgErr) {
+                                    console.error("Popup: Failed to save extracted image", imgErr);
+                                }
                             }
+                        } catch (dirErr) {
+                            console.error("Popup: Failed to create images directory", dirErr);
+                            statusMsg.textContent = 'Warning: Could not save images.';
                         }
-                    } catch (dirErr) {
-                        console.error("Popup: Failed to create images directory", dirErr);
-                        statusMsg.textContent = 'Warning: Could not save images.';
                     }
-                }
-                // -------------------------------------------------------
 
-                const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
-                const writable = await fileHandle.createWritable();
-                await writable.write(finalMarkdown);
-                await writable.close();
+                    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(finalMarkdown);
+                    await writable.close();
 
-                statusMsg.textContent = `Saved to ${dirHandle.name}!`;
-                setTimeout(() => statusMsg.textContent = '', 3000);
-                resolve();
-             } catch (e) {
-                 console.error("Save Error:", e);
-                 if (e.name === 'InvalidStateError') {
-                      statusMsg.textContent = 'Error: Folder access lost. Please re-select folder.';
-                      // Optionally clear the stale handle
-                      // await clearDirHandle(); 
-                 } else if (e.name === 'NotAllowedError') {
-                      statusMsg.textContent = 'Error: Permission denied. Re-select folder.';
-                 } else {
-                      statusMsg.textContent = 'Write error: ' + e.message;
+                    statusMsg.textContent = `Saved to ${dirHandle.name}!`;
+                    setTimeout(() => statusMsg.textContent = '', 3000);
+                    resolve();
+
+                 } catch (e) {
+                     console.error("Save Error:", e);
+                     if (e.name === 'InvalidStateError') {
+                          statusMsg.textContent = 'Error: Folder access lost. Please re-select folder.';
+                     } else if (e.name === 'NotAllowedError') {
+                          statusMsg.textContent = 'Error: Permission denied. Re-select folder.';
+                     } else {
+                          statusMsg.textContent = 'Write error: ' + e.message;
+                     }
+                     reject(e);
                  }
-                 reject(e);
-             }
+             });
         });
-    });
-}
+    }
 
 // Helper: Convert Base64 DataURI to Blob (Duplicate from content.js for standalone popup)
 function dataURItoBlob(dataURI) {

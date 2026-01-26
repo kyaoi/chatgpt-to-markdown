@@ -113,9 +113,15 @@
                 </div>
 
                 <div class="input-group">
+                    <label for="default-tags">Default Tags</label>
+                    <input type="text" id="default-tags" placeholder="AI, {date}, Project">
+                    <p class="help-text">Variables allowed: {title}, {date}, {time}</p>
+                </div>
+
+                <div class="input-group">
                     <label for="frontmatter-template">Frontmatter (YAML)</label>
                     <textarea id="frontmatter-template" rows="6"
-                        placeholder="---&#10;title: {title}&#10;url: {url}&#10;---"></textarea>
+                        placeholder="---&#10;title: {title}&#10;tags: {tags}&#10;url: {url}&#10;---"></textarea>
                 </div>
 
                 <div class="btn-group">
