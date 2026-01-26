@@ -191,13 +191,161 @@ function showFinishedState(state) {
         tagsContainer = document.createElement('div');
         tagsContainer.id = 'bulk-tags-container';
         tagsContainer.style.marginTop = '12px';
-        tagsContainer.innerHTML = `
-            <label class="ctm-label">Tags (Common for all files)</label>
-            <input type="text" id="bulk-tags-input" class="ctm-select" placeholder="e.g. AI, {date}" style="cursor:text; padding:8px;" value="${state.settings.defaultTags || ''}">
-            <p style="font-size:10px; color:var(--ctm-sub); margin:4px 0 0;">Variables allowed: {title}, {date}...</p>
+        tagsContainer.style.width = '100%';
+        
+        // CSS for Chips and Input
+        const style = document.createElement('style');
+        style.textContent = `
+            .ctm-tag-container {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                padding: 6px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background: white;
+                min-height: 38px;
+            }
+            .ctm-tag-chip {
+                background: #e0e0e0;
+                border-radius: 16px;
+                padding: 4px 10px;
+                display: flex;
+                align-items: center;
+                font-size: 12px;
+                color: #333;
+            }
+            .ctm-tag-chip .remove {
+                margin-left: 6px;
+                cursor: pointer;
+                color: #666;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            .ctm-tag-input {
+                border: none;
+                outline: none;
+                flex: 1;
+                min-width: 60px;
+                padding: 4px;
+                font-size: 13px;
+                color: #000 !important; /* Force black text */
+                background: transparent;
+                appearance: none;
+                -webkit-appearance: none; 
+            }
+            .ctm-tag-input::placeholder {
+                color: #888;
+            }
+            .ctm-var-chip {
+                display: inline-block;
+                background: #f0f0f0;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                padding: 2px 6px;
+                margin: 2px;
+                font-size: 11px;
+                color: #333 !important; /* Force dark text */
+                cursor: pointer;
+                user-select: none;
+                transition: background 0.2s;
+            }
+            .ctm-var-chip:hover {
+                background: #e0e0e0;
+                border-color: #999;
+            }
+            /* Remove list arrows from some browsers */
+            .ctm-tag-input::-webkit-calendar-picker-indicator {
+                display: none !important;
+            }
         `;
+        document.head.appendChild(style);
+
+        tagsContainer.innerHTML = `
+            <label class="ctm-label" style="display:block; margin-bottom:4px;">Tags (One by one)</label>
+            <div class="ctm-tag-container" id="ctm-tag-wrapper">
+                <input type="text" id="bulk-tags-input" class="ctm-tag-input" placeholder="Type & Enter (e.g. AI, {date})">
+            </div>
+            <div style="margin-top:6px;">
+                <div style="font-size:10px; color:var(--ctm-sub); margin-bottom:4px;">Click to add variable:</div>
+                <div id="ctm-variable-list">
+                    <span class="ctm-var-chip" data-val="{folder}">{folder}</span>
+                    <span class="ctm-var-chip" data-val="{title}">{title}</span>
+                    <span class="ctm-var-chip" data-val="{date}">{date}</span>
+                    <span class="ctm-var-chip" data-val="{time}">{time}</span>
+                    <span class="ctm-var-chip" data-val="{url}">{url}</span>
+                </div>
+            </div>
+            <input type="hidden" id="bulk-tags-hidden-value" value="${state.settings.defaultTags || ''}">
+        `;
+        
         // Insert before buttons
         saveBtn.parentElement.before(tagsContainer);
+
+        // --- Logic for Chip UI ---
+        const wrapper = tagsContainer.querySelector('#ctm-tag-wrapper');
+        const input = tagsContainer.querySelector('#bulk-tags-input');
+        const hiddenVal = tagsContainer.querySelector('#bulk-tags-hidden-value');
+        const varList = tagsContainer.querySelector('#ctm-variable-list');
+        
+        let tags = (state.settings.defaultTags || '').split(',').map(s => s.trim()).filter(Boolean);
+
+        function renderTags() {
+            // clear wrapper except input
+           const chips = wrapper.querySelectorAll('.ctm-tag-chip');
+           chips.forEach(c => c.remove());
+           
+           tags.forEach((tag, idx) => {
+               const chip = document.createElement('div');
+               chip.className = 'ctm-tag-chip';
+               chip.innerHTML = `${tag} <span class="remove">&times;</span>`;
+               chip.querySelector('.remove').onclick = () => {
+                   tags.splice(idx, 1);
+                   update();
+               };
+               wrapper.insertBefore(chip, input);
+           });
+        }
+
+        function update() {
+            renderTags();
+            hiddenVal.value = tags.join(', ');
+            input.focus();
+        }
+
+        // Variable Click Handler
+        varList.querySelectorAll('.ctm-var-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const val = chip.getAttribute('data-val');
+                // Insert at cursor position or append
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                const text = input.value;
+                input.value = text.substring(0, start) + val + text.substring(end);
+                input.focus();
+                // Move cursor after inserted text
+                input.selectionStart = input.selectionEnd = start + val.length;
+            });
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                const val = input.value.trim().replace(/^,|,$/g, '');
+                if (val) {
+                    tags.push(val);
+                    input.value = ''; // Clear input only on enter
+                    update();
+                }
+            }
+            if (e.key === 'Backspace' && !input.value && tags.length > 0) {
+                tags.pop();
+                update();
+            }
+        });
+
+        // Initial render
+        renderTags();
     }
 
     const count = Object.keys(state.results || {}).length;
@@ -547,19 +695,62 @@ async function fetchImageAsBase64(url) {
 }
 
 // --- Step: Finalize (Save All) ---
+
 async function saveAllToDisk() {
     // Reload state to be sure
     const data = await chrome.storage.local.get(['automationState']);
     const state = data.automationState;
     if (!state || !state.results) return;
     
-    // Get custom tags from UI if available
-    const tagsInput = document.getElementById('bulk-tags-input');
-    const customTags = tagsInput ? tagsInput.value : (state.settings.defaultTags || '');
+    // Get custom tags from UI (Chip UI uses hidden input)
+    // Try global lookup first
+    let hiddenTags = document.getElementById('bulk-tags-hidden-value');
+    let visibleInput = document.getElementById('bulk-tags-input');
+
+    // Fallback: Try identifying via context (this = button) if global lookup fails
+    if ((!hiddenTags || !visibleInput) && this && this.closest) {
+        const container = this.closest('#chatgpt-to-md-bulk-panel');
+        if (container) {
+            if (!hiddenTags) hiddenTags = container.querySelector('#bulk-tags-hidden-value');
+            if (!visibleInput) visibleInput = container.querySelector('#bulk-tags-input');
+        }
+    }
+    
+    // Check if there is pending text in the input that hasn't been "Entered"
+    let pendingTag = '';
+    if (visibleInput && visibleInput.value.trim()) {
+        pendingTag = visibleInput.value.trim().replace(/^,|,$/g, '');
+    }
+
+    // Fallback to text input if hidden missing (compatibility) or default tags
+    // If hiddenTags exists, use it. If not, use default.
+    // Also append pendingTag if it exists
+    let rawTags = hiddenTags ? hiddenTags.value : (state.settings.defaultTags || '');
+    if (pendingTag) {
+        rawTags = rawTags ? `${rawTags}, ${pendingTag}` : pendingTag;
+    }
+    
+    console.log("BulkExport: Tags Logic:", {
+        hiddenFound: !!hiddenTags,
+        hiddenValue: hiddenTags ? hiddenTags.value : 'N/A',
+        visibleFound: !!visibleInput,
+        pendingTag: pendingTag,
+        defaultTags: state.settings.defaultTags,
+        finalRaw: rawTags
+    });
+    
+    // Fallback if empty? No, checking specific fallback behavior.
+    // If user explicitly cleared tags, rawTags is "".
+    // If hiddenTags is null (UI not shown?), we fall back to defaults.
+    if (!hiddenTags && !rawTags) {
+        rawTags = state.settings.defaultTags || '';
+    }
+
+    const customTags = rawTags;
 
     try {
         const dirHandle = await window.showDirectoryPicker();
-        const folderName = dirHandle.name;
+        const folderName = dirHandle.name || 'Folder'; // Fallback if name is missing
         
         // Create images subdirectory
         const imagesDir = await dirHandle.getDirectoryHandle('images', { create: true });
@@ -569,12 +760,11 @@ async function saveAllToDisk() {
         let saved = 0;
         
         for (const file of results) {
-            // FIX: Hoist finalContent here so it's accessible in catch block
             let finalContent = file.content;
             
             try {
                 // --- Image Extraction & Externalization ---
-                // ... (Existing Image Logic) ...
+                // ... (Same logic, omitting for brevity in diff if not changed) ...
                 const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
                 const matches = [...finalContent.matchAll(imgRegex)];
                 let imgCount = 0;
@@ -585,24 +775,17 @@ async function saveAllToDisk() {
                         const alt = match[1];
                         const dataURI = match[2];
                         const ext = match[3] === 'jpeg' ? 'jpg' : match[3];
-                        
                         const baseName = file.filename.replace('.md', '');
                         const imgFilename = `${baseName}_img${imgCount}.${ext}`;
-                        
                         const blob = dataURItoBlob(dataURI);
-                        
                         const imgHandle = await imagesDir.getFileHandle(imgFilename, { create: true });
                         const writable = await imgHandle.createWritable();
                         await writable.write(blob);
                         await writable.close();
-                        
                         finalContent = finalContent.replace(fullMatch, `![${alt}](images/${imgFilename})`);
                         imgCount++;
-                    } catch (imgErr) {
-                        console.error("Failed to save extracted image", imgErr);
-                    }
+                    } catch (imgErr) { console.error(imgErr); }
                 }
-                // ------------------------------------------
 
                 // Apply Frontmatter if metadata exists
                 if (file.frontmatterData && state.settings.frontmatterTemplate) {
@@ -616,13 +799,46 @@ async function saveAllToDisk() {
                      // Format tags array [tag1, tag2]
                      const tagArrayString = '[' + fileTags.split(',').map(t => t.trim()).filter(Boolean).join(', ') + ']';
 
-                     let fm = state.settings.frontmatterTemplate
+                     // Smart Override: If template lacks {tags} but we have tags, force update the template
+                     let activeTemplate = state.settings.frontmatterTemplate;
+                     if (!activeTemplate.includes('{tags}') && fileTags) {
+                         console.log("BulkExport: forcing tag injection into template");
+                         // Regex to match "tags:" followed by list items or inline array
+                         // 1. Match: "tags:\n  - foo\n  - bar"
+                         const listRegex = /tags:\s*(\n\s*-\s*.*)+/g;
+                         // 2. Match: "tags: [foo, bar]" or "tags: foo"
+                         const inlineRegex = /tags:.*$/gm;
+
+                         if (listRegex.test(activeTemplate)) {
+                             activeTemplate = activeTemplate.replace(listRegex, 'tags: {tags}');
+                         } else if (inlineRegex.test(activeTemplate)) {
+                             activeTemplate = activeTemplate.replace(inlineRegex, 'tags: {tags}');
+                         } else {
+                             // No tags key found, append it before the end? 
+                             // Risky to append blindly to YAML, might break valid syntax if "---" is at end.
+                             // Attempt to insert before last "---" if present
+                             const lastDash = activeTemplate.lastIndexOf('---');
+                             if (lastDash > 3) {
+                                 activeTemplate = activeTemplate.substring(0, lastDash) + 'tags: {tags}\n' + activeTemplate.substring(lastDash);
+                             } else {
+                                 // No closing --- or weird format, just prepend?
+                                 activeTemplate = activeTemplate + '\ntags: {tags}';
+                             }
+                         }
+                     }
+
+                     let fm = activeTemplate
                         .replace(/{folder}/g, folderName)
                         .replace(/{title}/g, file.frontmatterData.title)
                         .replace(/{url}/g, file.frontmatterData.url)
                         .replace(/{date}/g, file.frontmatterData.date)
                         .replace(/{time}/g, file.frontmatterData.time)
-                        .replace(/{tags}/g, tagArrayString); // Inject tags
+                        .replace(/{tags}/g, tagArrayString); 
+                     
+                     if (saved === 0) {
+                         console.log("BulkExport: Final FM Sample:", fm);
+                     }
+
                      finalContent = fm + finalContent;
                 }
 
@@ -633,7 +849,6 @@ async function saveAllToDisk() {
                 saved++;
                 if (saved % 5 === 0) updateStatusUI(`Saved ${saved}/${results.length}...`);
             } catch (e) {
-                // ... (Existing Error Handling) ...
                 console.error(`Write failed for ${file.filename}:`, e.name, e.message);
                 updateStatusUI(`Error: ${e.name} on ${file.filename.substring(0,20)}... Retrying...`);
                 
@@ -643,7 +858,36 @@ async function saveAllToDisk() {
                     const safeName = `${state.results[Object.keys(state.results).find(k => state.results[k] === file)]?.id || Date.now()}.md`; 
                     const fileHandle = await dirHandle.getFileHandle(safeName, { create: true });
                     const writable = await fileHandle.createWritable();
-                    await writable.write(`<!-- Original Title: ${file.frontmatterData?.title || 'Unknown'} -->\n` + finalContent); 
+                    
+                    // FIX: Ensure frontmatter is definitely first.
+                    // If frontmatter was applied, it is in `finalContent`.
+                    // We want the fallback comment to be APPLIED AFTER frontmatter or at the very end??
+                    // Or if we prepend comment, it breaks FM.
+                    // Solution: Verify if finalContent starts with ---
+                    
+                    let fallbackContent = finalContent;
+                    const originalTitleComment = `<!-- Original Title: ${file.frontmatterData?.title || 'Unknown'} -->\n`;
+
+                    if (fallbackContent.startsWith('---')) {
+                        // Insert comment AFTER second --- (end of FM)
+                        // Or just append it? Markdown comments can be anywhere.
+                        // Ideally after FM.
+                        const fmEndIndex = fallbackContent.indexOf('---', 3);
+                        if (fmEndIndex !== -1) {
+                             // Insert after `---` + newline
+                             const insertPos = fmEndIndex + 3;
+                             fallbackContent = fallbackContent.substring(0, insertPos) + '\n' + originalTitleComment + fallbackContent.substring(insertPos);
+                        } else {
+                            // Weird FM, just append comment? Or prepend?
+                            // If we prepend, it breaks. Append is safe.
+                            fallbackContent = fallbackContent + '\n' + originalTitleComment;
+                        }
+                    } else {
+                        // No FM, safe to prepend
+                        fallbackContent = originalTitleComment + fallbackContent;
+                    }
+                    
+                    await writable.write(fallbackContent); 
                     await writable.close();
                     saved++;
                     updateStatusUI(`Saved (Fallback) ${saved}/${results.length}...`);
