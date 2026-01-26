@@ -855,18 +855,21 @@ async function saveAllToDisk() {
                 try { await dirHandle.removeEntry(file.filename); } catch (d) {}
 
                 try {
-                    const safeName = `${state.results[Object.keys(state.results).find(k => state.results[k] === file)]?.id || Date.now()}.md`; 
+                    // FALLBACK STRATEGY:
+                    // 1. Try to keep the title but make it super safe.
+                    // 2. Append timestamp to ensure uniqueness.
+                    const safeTitle = (file.frontmatterData?.title || 'Untitled')
+                        .replace(/[^\w\u00C0-\u024f\u3000-\u30ff\u4e00-\u9faf\uff01-\uff5e ]/g, '_') // Allow CJK and basic chars, repl everything else
+                        .trim().substring(0, 50); 
+                    
+                    const safeName = `${safeTitle}_${Date.now()}.md`;
+                     
                     const fileHandle = await dirHandle.getFileHandle(safeName, { create: true });
                     const writable = await fileHandle.createWritable();
                     
                     // FIX: Ensure frontmatter is definitely first.
-                    // If frontmatter was applied, it is in `finalContent`.
-                    // We want the fallback comment to be APPLIED AFTER frontmatter or at the very end??
-                    // Or if we prepend comment, it breaks FM.
-                    // Solution: Verify if finalContent starts with ---
-                    
                     let fallbackContent = finalContent;
-                    const originalTitleComment = `<!-- Original Title: ${file.frontmatterData?.title || 'Unknown'} -->\n`;
+                    const originalTitleComment = `<!-- Original Title: ${file.frontmatterData?.title || 'Unknown'} (Saved via Fallback) -->\n`;
 
                     if (fallbackContent.startsWith('---')) {
                         // Insert comment AFTER second --- (end of FM)
@@ -898,13 +901,14 @@ async function saveAllToDisk() {
             }
         }
         
-        updateStatusUI(`Done! Saved ${saved} files.`);
-        alert(`Bulk Export Completed!\n\nSaved: ${saved}\n(Reloading extension to reset)`);
-        
-        // Cleanup
-        await chrome.storage.local.set({ automationState: { isRunning: false } });
-        window.location.reload();
-        
+// End of saveAllToDisk
+    updateStatusUI(`Done! Saved ${saved} files.`);
+    alert(`Bulk Export Completed!\n\nSaved: ${saved}\n(Reloading extension to reset)`);
+    
+    // Cleanup
+    await chrome.storage.local.set({ automationState: { isRunning: false } });
+    window.location.reload();
+    
     } catch (e) {
         alert("Save cancelled or failed: " + e.message + "\n" + e.name);
     }
