@@ -54,6 +54,22 @@ class MarkdownConverter {
                 const isHidden = window.getComputedStyle(child).display === 'none';
                 if (isHidden) return;
 
+                // --- PRIORITY: Code Blocks (pre) ---
+                if (tagName === 'pre') {
+                    const codeBlock = child.querySelector('code');
+                    // Header removal logic: sometimes 'pre' contains a header div (language + copy).
+                    // We want only the code.
+                    if (codeBlock) {
+                        const langClass = Array.from(codeBlock.classList).find(c => c.startsWith('language-'));
+                        const lang = langClass ? langClass.replace('language-', '') : '';
+                        text += "\n```" + lang + "\n" + codeBlock.innerText + "\n```\n\n";
+                    } else {
+                         // Fallback
+                         text += "\n```\n" + child.innerText + "\n```\n\n";
+                    }
+                    return; 
+                }
+
                 // --- UI Cleaning Filters ---
                 
                 // 1. Extension Icons (e.g. PDF viewer icon)
