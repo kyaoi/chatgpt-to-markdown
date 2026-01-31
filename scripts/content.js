@@ -782,7 +782,7 @@ async function saveAllToDisk() {
                         const writable = await imgHandle.createWritable();
                         await writable.write(blob);
                         await writable.close();
-                        finalContent = finalContent.replace(fullMatch, `![${alt}](images/${imgFilename})`);
+                        finalContent = finalContent.replace(fullMatch, `![[images/${imgFilename}]]`);
                         imgCount++;
                     } catch (imgErr) { console.error(imgErr); }
                 }

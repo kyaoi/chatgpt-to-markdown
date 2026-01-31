@@ -316,7 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     await writable.write(blob);
                                     await writable.close();
                                     
-                                    finalMarkdown = finalMarkdown.replace(fullMatch, `![${alt}](images/${imgFilename})`);
+                                    finalMarkdown = finalMarkdown.replace(fullMatch, `![[images/${imgFilename}]]`);
                                     imgCount++;
                                 } catch (imgErr) {
                                     console.error("Popup: Failed to save extracted image", imgErr);
