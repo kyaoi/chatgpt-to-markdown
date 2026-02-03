@@ -36,6 +36,18 @@
         "scripts/file_saver.js",
         "scripts/markdown_converter.js",
         "scripts/content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "scripts/project_interceptor.js"
+      ],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
       ]
     }
   ]

@@ -13,129 +13,239 @@ let bulkUI = null;
 function createBulkUI(initialState = null) {
     if (bulkUI) return;
 
-    // Inject styles (Modern / Glassmorphism)
+    // Inject styles (Modern / Glassmorphism with Modal)
     const style = document.createElement('style');
     style.textContent = `
         :root {
             --ctm-bg: #202123;
-            --ctm-card: #2d2f33; /* Slightly lighter for contrast */
+            --ctm-card: #2d2f33;
             --ctm-text: #ececf1;
             --ctm-sub: #8e8ea0;
             --ctm-accent: #10a37f;
             --ctm-accent-hover: #1a7f64;
             --ctm-border: #4d4d4f;
             --ctm-danger: #ef4146;
-            --ctm-radius: 8px;
-            --ctm-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            --ctm-radius: 12px;
+            --ctm-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
             --ctm-font: 'Söhne', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         }
+        
+        /* Overlay */
+        #chatgpt-to-md-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            z-index: 9999; opacity: 0;
+            animation: ctm-fade-in 0.3s ease forwards;
+        }
+        @keyframes ctm-fade-in {
+            to { opacity: 1; }
+        }
+        
+        /* Main Panel - Centered Modal */
         #chatgpt-to-md-bulk-panel {
-            position: fixed; bottom: 24px; right: 24px; width: 360px;
+            position: fixed; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%) scale(0.95);
+            width: 480px; max-width: 90vw; max-height: 80vh;
             background: var(--ctm-bg); color: var(--ctm-text);
             border: 1px solid var(--ctm-border); border-radius: var(--ctm-radius);
             box-shadow: var(--ctm-shadow); z-index: 10000;
             font-family: var(--ctm-font); font-size: 14px;
             display: flex; flex-direction: column; overflow: hidden;
-            transition: all 0.3s ease; opacity: 0; transform: translateY(20px);
-            animation: ctm-slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            animation: ctm-modal-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
-        @keyframes ctm-slide-up {
-            to { opacity: 1; transform: translateY(0); }
+        @keyframes ctm-modal-in {
+            to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         }
+        
         #chatgpt-to-md-bulk-header {
-            background: rgba(255,255,255,0.03); padding: 16px;
+            background: rgba(255,255,255,0.03); padding: 16px 20px;
             border-bottom: 1px solid var(--ctm-border);
             display: flex; justify-content: space-between; align-items: center;
         }
         #chatgpt-to-md-bulk-header h3 {
-             margin: 0; font-size: 14px; font-weight: 600; color: #fff;
+            margin: 0; font-size: 16px; font-weight: 600; color: #fff;
+            display: flex; align-items: center; gap: 8px;
         }
-        #chatgpt-to-md-bulk-body { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+        #chatgpt-to-md-bulk-body { 
+            padding: 20px; display: flex; flex-direction: column; gap: 16px;
+            overflow-y: auto; flex: 1;
+        }
+        
         .ctm-btn {
-            border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer;
-            font-weight: 500; font-size: 13px; width: 100%;
+            border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer;
+            font-weight: 500; font-size: 13px;
             transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
         }
         .ctm-btn:active { transform: scale(0.98); }
-        .ctm-primary { background: var(--ctm-accent); color: white; }
+        .ctm-primary { background: var(--ctm-accent); color: white; flex: 1; }
         .ctm-primary:hover { background: var(--ctm-accent-hover); }
         .ctm-danger { background: var(--ctm-danger); color: white; }
         .ctm-danger:hover { opacity: 0.9; }
-        .ctm-secondary { background: transparent; border: 1px solid var(--ctm-border); color: var(--ctm-text); }
-        .ctm-secondary:hover { background: rgba(255,255,255,0.05); border-color: #6e6e80; }
-        
-        .ctm-select {
-            width: 100%; padding: 10px; background: #343541;
-            border: 1px solid var(--ctm-border); color: var(--ctm-text);
-            border-radius: 6px; outline: none; appearance: none;
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8ea0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-            background-repeat: no-repeat; background-position: right 10px center; background-size: 16px;
+        .ctm-secondary { 
+            background: transparent; border: 1px solid var(--ctm-border); color: var(--ctm-text);
+            padding: 10px 12px;
         }
-        .ctm-select:focus { border-color: var(--ctm-accent); }
-
+        .ctm-secondary:hover { background: rgba(255,255,255,0.05); border-color: #6e6e80; }
+        .ctm-icon-btn {
+            background: transparent; border: 1px solid var(--ctm-border); 
+            color: var(--ctm-sub); padding: 8px; border-radius: 6px; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .ctm-icon-btn:hover { background: rgba(255,255,255,0.05); color: var(--ctm-text); }
+        
+        /* Search Input */
+        .ctm-search-container {
+            position: relative;
+        }
+        .ctm-search-input {
+            width: 100%; padding: 12px 12px 12px 40px; 
+            background: #343541; border: 1px solid var(--ctm-border); 
+            color: var(--ctm-text); border-radius: 8px; outline: none;
+            font-size: 14px; transition: border-color 0.2s;
+        }
+        .ctm-search-input:focus { border-color: var(--ctm-accent); }
+        .ctm-search-input::placeholder { color: var(--ctm-sub); }
+        .ctm-search-icon {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            color: var(--ctm-sub); pointer-events: none;
+        }
+        
+        /* Project List */
+        .ctm-project-list {
+            display: flex; flex-direction: column; gap: 8px;
+            max-height: 300px; overflow-y: auto; padding-right: 4px;
+        }
+        .ctm-project-item {
+            padding: 12px 16px; background: var(--ctm-card);
+            border: 1px solid transparent; border-radius: 8px;
+            cursor: pointer; transition: all 0.2s;
+            display: flex; align-items: center; gap: 12px;
+        }
+        .ctm-project-item:hover { 
+            background: #3d3f43; border-color: var(--ctm-border); 
+        }
+        .ctm-project-item.selected {
+            border-color: var(--ctm-accent); background: rgba(16, 163, 127, 0.1);
+        }
+        .ctm-project-icon {
+            width: 32px; height: 32px; border-radius: 6px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: 600; font-size: 14px;
+        }
+        .ctm-project-name {
+            flex: 1; font-weight: 500; color: var(--ctm-text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .ctm-project-personal .ctm-project-icon {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        /* Footer */
+        .ctm-footer {
+            display: flex; gap: 10px; align-items: center;
+            padding-top: 16px; border-top: 1px solid var(--ctm-border);
+        }
+        .ctm-project-count {
+            font-size: 12px; color: var(--ctm-sub); margin-left: auto;
+        }
+        
         .ctm-label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 500; color: var(--ctm-sub); }
 
         #bulk-status-container {
-             background: #1a1b1e; border-radius: 6px; padding: 12px; border: 1px solid var(--ctm-border);
+            background: #1a1b1e; border-radius: 8px; padding: 16px; border: 1px solid var(--ctm-border);
         }
         #bulk-status-text {
-            font-family: 'Before-Mono', menlo, monospace; font-size: 11px; 
+            font-family: 'JetBrains Mono', 'Fira Code', menlo, monospace; font-size: 12px; 
             white-space: pre-wrap; color: var(--ctm-text); 
-            min-height: 60px; max-height: 150px; overflow-y: auto;
-            line-height: 1.5;
+            min-height: 80px; max-height: 180px; overflow-y: auto;
+            line-height: 1.6;
         }
+        
         /* Scrollbar */
-        #bulk-status-text::-webkit-scrollbar { width: 6px; }
-        #bulk-status-text::-webkit-scrollbar-track { background: transparent; }
-        #bulk-status-text::-webkit-scrollbar-thumb { background: #565869; border-radius: 3px; }
+        .ctm-project-list::-webkit-scrollbar, #bulk-status-text::-webkit-scrollbar { width: 6px; }
+        .ctm-project-list::-webkit-scrollbar-track, #bulk-status-text::-webkit-scrollbar-track { background: transparent; }
+        .ctm-project-list::-webkit-scrollbar-thumb, #bulk-status-text::-webkit-scrollbar-thumb { 
+            background: #565869; border-radius: 3px; 
+        }
+        
+        /* Hide when not in controls mode */
+        #bulk-controls.hidden { display: none; }
     `;
     document.head.appendChild(style);
+
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'chatgpt-to-md-overlay';
+    document.body.appendChild(overlay);
 
     const div = document.createElement('div');
     div.id = 'chatgpt-to-md-bulk-panel';
     div.innerHTML = `
         <div id="chatgpt-to-md-bulk-header">
-            <h3>Export Manager</h3>
-            <button id="bulk-close-btn" style="background:none; border:none; color:var(--ctm-sub); cursor:pointer; font-size:18px; line-height:1;">&times;</button>
+            <h3>📦 Export Manager</h3>
+            <button id="bulk-close-btn" class="ctm-icon-btn" title="Close">✕</button>
         </div>
         <div id="chatgpt-to-md-bulk-body">
             <div id="bulk-controls">
-                <div>
-                    <label class="ctm-label">Source Project / Context</label>
-                    <select id="bulk-project-select" class="ctm-select">
-                        <option value="" disabled selected>Loading...</option>
-                    </select>
+                <div class="ctm-search-container">
+                    <svg class="ctm-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                    <input type="text" id="bulk-project-search" class="ctm-search-input" placeholder="Search projects...">
                 </div>
-                <div style="margin-top: 20px;">
+                
+                <div class="ctm-project-list" id="bulk-project-list">
+                    <div style="text-align: center; padding: 40px; color: var(--ctm-sub);">
+                        Loading projects...
+                    </div>
+                </div>
+                
+                <div class="ctm-footer">
+                    <button id="bulk-refresh-btn" class="ctm-icon-btn" title="Refresh projects">⟳</button>
                     <button id="bulk-start-btn" class="ctm-btn ctm-primary">
                         <span>Start Export</span>
                     </button>
+                    <span id="bulk-project-count" class="ctm-project-count">Loading...</span>
+                </div>
+                <div style="margin-top: 10px; font-size: 11px; color: var(--ctm-sub); line-height: 1.4; text-align: center; border: 1px dashed var(--ctm-border); padding: 8px; border-radius: 6px;">
+                    💡 全てのプロジェクトを読み込むには、ChatGPTのサイドバーの「もっと見る」を押してプロジェクトをすべて表示させてください。
                 </div>
             </div>
 
             <div id="bulk-status-container" style="display: none;">
-                 <label class="ctm-label">Status Log</label>
-                 <div id="bulk-status-text">Initializing...</div>
-                 <div style="display:flex; gap:10px; margin-top:12px;">
-                    <button id="bulk-stop-btn" class="ctm-btn ctm-danger">Stop</button>
-                    <button id="bulk-save-btn" class="ctm-btn ctm-primary" style="display:none; width:100%;">Finalize & Save</button>
-                 </div>
+                <label class="ctm-label">Status Log</label>
+                <div id="bulk-status-text">Initializing...</div>
+                <div style="display:flex; gap:10px; margin-top:16px;">
+                    <button id="bulk-stop-btn" class="ctm-btn ctm-danger" style="flex:0 0 auto; padding: 10px 20px;">Stop</button>
+                    <button id="bulk-save-btn" class="ctm-btn ctm-primary" style="display:none;">Finalize & Save</button>
+                </div>
             </div>
         </div>
     `;
 
+
     document.body.appendChild(div);
     bulkUI = div;
 
-    // Event Listeners
-    div.querySelector('#bulk-close-btn').addEventListener('click', () => {
+    // Close function
+    const closeUI = () => {
+        const overlay = document.getElementById('chatgpt-to-md-overlay');
         div.style.opacity = '0';
-        div.style.transform = 'translateY(20px)';
+        div.style.transform = 'translate(-50%, -50%) scale(0.95)';
+        if (overlay) overlay.style.opacity = '0';
         setTimeout(() => {
             div.remove();
+            if (overlay) overlay.remove();
             bulkUI = null;
         }, 300);
-    });
+    };
+
+    // Event Listeners
+    div.querySelector('#bulk-close-btn').addEventListener('click', closeUI);
+    overlay.addEventListener('click', closeUI);
 
     div.querySelector('#bulk-start-btn').addEventListener('click', startNewExport);
     
@@ -147,6 +257,39 @@ function createBulkUI(initialState = null) {
     });
 
     div.querySelector('#bulk-save-btn').addEventListener('click', saveAllToDisk);
+
+    // Search functionality
+    const searchInput = div.querySelector('#bulk-project-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const items = div.querySelectorAll('.ctm-project-item');
+            items.forEach(item => {
+                const name = item.querySelector('.ctm-project-name')?.textContent.toLowerCase() || '';
+                item.style.display = name.includes(query) ? 'flex' : 'none';
+            });
+        });
+    }
+
+    // Refresh button
+    const refreshBtn = div.querySelector('#bulk-refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            refreshBtn.style.animation = 'spin 1s linear infinite';
+            refreshBtn.style.transformOrigin = 'center';
+            
+            // Clear cache and reload
+            if (typeof projectInterceptor !== 'undefined') {
+                await projectInterceptor.clearCache();
+            }
+            
+            // Trigger a page reload to re-capture API responses
+            // Or just re-fetch from DOM as fallback
+            await fetchProjects();
+            
+            refreshBtn.style.animation = '';
+        });
+    }
 
     // Initial Load
     fetchProjects();
@@ -354,43 +497,253 @@ function showFinishedState(state) {
 }
 
 
+// --- Project Intercept Integration ---
+const projectInterceptor = {
+    cache: new Map(),
+    lastUpdated: null,
+    listeners: [],
+
+    subscribe(fn) {
+        this.listeners.push(fn);
+        return () => {
+            this.listeners = this.listeners.filter(l => l !== fn);
+        };
+    },
+    
+    clearListeners() {
+        this.listeners = [];
+    },
+    
+    notify() {
+        const projects = this.getProjects();
+        const stats = this.getStats();
+        this.listeners.forEach(fn => fn(projects, stats));
+    },
+
+    getProjects() {
+        return Array.from(this.cache.values()).sort((a, b) => a.name.localeCompare(b.name));
+    },
+    
+    getStats() {
+        return { 
+            cacheAge: this.lastUpdated ? Math.floor((Date.now() - this.lastUpdated) / 1000) : 0,
+            totalProjects: this.cache.size 
+        };
+    },
+    
+    addProjects(projects) {
+         projects.forEach(p => this.cache.set(p.shortUrl, p));
+         this.lastUpdated = Date.now();
+         this.saveCache();
+         this.notify();
+    },
+    
+    async saveCache() {
+         await chrome.storage.local.set({ 
+             projectCache: { 
+                 projects: Array.from(this.cache.values()), 
+                 lastUpdated: this.lastUpdated 
+             } 
+         });
+    },
+    
+    async loadCache() {
+        try {
+            const data = await chrome.storage.local.get(['projectCache']);
+            if (data.projectCache?.projects) {
+                 data.projectCache.projects.forEach(p => this.cache.set(p.shortUrl, p));
+                 this.lastUpdated = data.projectCache.lastUpdated;
+            }
+        } catch(e) {}
+    },
+    
+    async clearCache() {
+        this.cache.clear();
+        this.lastUpdated = null;
+        await chrome.storage.local.remove(['projectCache']);
+        this.notify();
+    }
+};
+
+// Listen for messages from Main World
+window.addEventListener('message', (event) => {
+    if (event.data?.type === 'CTM_PROJECT_DATA') {
+        projectInterceptor.addProjects(event.data.payload);
+    }
+});
+
+// Inject Interceptor Script
+try {
+    const script = document.createElement('script');
+    script.src = chrome.runtime.getURL('scripts/project_interceptor.js');
+    script.onload = function() { this.remove(); };
+    (document.head || document.documentElement).appendChild(script);
+} catch (e) {}
+
+// Init cache
+projectInterceptor.loadCache();
+
+
 // --- Project Discovery ---
+// Store selected project
+let selectedProject = null;
+
+// Helper to render project list
+function renderProjectList(projects) {
+    const projectList = document.getElementById('bulk-project-list');
+    const countEl = document.getElementById('bulk-project-count');
+    if (!projectList) return;
+
+    projectList.innerHTML = '';
+    
+    // Add Personal option first
+    const personalItem = createProjectItem({
+        shortUrl: 'personal',
+        name: 'Personal / Current Context',
+        isPersonal: true
+    });
+    projectList.appendChild(personalItem);
+    
+    // Add all projects
+    projects.forEach(project => {
+        const item = createProjectItem(project);
+        projectList.appendChild(item);
+    });
+
+    // Update count
+    if (countEl) {
+        countEl.textContent = `Found: ${projects.length} projects`;
+    }
+}
+
 async function fetchProjects() {
-    const select = document.getElementById('bulk-project-select');
-    if (!select) return;
+    const projectList = document.getElementById('bulk-project-list');
+    
+    if (!projectList) return;
 
-    select.innerHTML = '<option value="" disabled selected>Scanning...</option>';
-    await new Promise(r => setTimeout(r, 1000));
-    select.innerHTML = '';
-    const personalOpt = document.createElement('option');
-    personalOpt.value = "personal";
-    personalOpt.textContent = "Personal / Current Context"; 
-    select.appendChild(personalOpt);
+    // Reset list logic - clear old listeners
+    projectInterceptor.clearListeners();
+    
+    // Subscribe to future updates (Real-time from sidebar/fetch)
+    projectInterceptor.subscribe((newProjects) => {
+        renderProjectList(newProjects);
+    });
 
+    // Initial check
+    let projects = projectInterceptor.getProjects();
+    
+    if (projects.length === 0) {
+        projectList.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--ctm-sub);">
+                Loading projects...<br>
+                <div style="font-size:0.9em; margin-top:8px; opacity:0.8;">(Try expanding 'Show More' in Sidebar)</div>
+            </div>
+        `;
+        
+        // Wait and fallback to DOM
+        setTimeout(() => {
+            // Check again
+            const currentProjs = projectInterceptor.getProjects();
+            if (currentProjs.length === 0) {
+                 const scanned = scanProjectsFromDOM();
+                 if (scanned.length > 0) {
+                     projectInterceptor.addProjects(scanned);
+                 } else {
+                     projectList.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: var(--ctm-sub);">
+                            No projects found yet.<br>
+                            Please find and click project in sidebar.
+                        </div>
+                     `;
+                 }
+            } else {
+                renderProjectList(currentProjs);
+            }
+        }, 2000);
+    } else {
+        renderProjectList(projects);
+    }
+
+    // Select first item by default if none selected
+    if (!selectedProject) {
+        selectProject('personal');
+    }
+}
+
+// Create a project item element
+function createProjectItem(project) {
+    const div = document.createElement('div');
+    div.className = `ctm-project-item${project.isPersonal ? ' ctm-project-personal' : ''}`;
+    div.dataset.shortUrl = project.shortUrl;
+    
+    // Get first letter for icon
+    const initial = project.name.charAt(0).toUpperCase();
+    
+    div.innerHTML = `
+        <div class="ctm-project-icon">${project.isPersonal ? '👤' : initial}</div>
+        <div class="ctm-project-name">${project.name}</div>
+    `;
+    
+    div.addEventListener('click', () => {
+        selectProject(project.shortUrl);
+    });
+    
+    return div;
+}
+
+// Select a project
+function selectProject(shortUrl) {
+    selectedProject = shortUrl;
+    
+    // Update visual state
+    const items = document.querySelectorAll('.ctm-project-item');
+    items.forEach(item => {
+        if (item.dataset.shortUrl === shortUrl) {
+            item.classList.add('selected');
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+}
+
+// Get currently selected project (for startNewExport)
+function getSelectedProject() {
+    return selectedProject;
+}
+
+// Fallback: Scan projects from DOM (original method)
+function scanProjectsFromDOM() {
+    const projects = [];
     try {
         const projectLinks = document.querySelectorAll('nav a[href*="/project"]');
         projectLinks.forEach(link => {
             const href = link.getAttribute('href');
             const match = href.match(/\/g\/([^\/]+)\/project/);
             if (match) {
-                const id = match[1];
+                const shortUrl = match[1];
                 const nameDiv = link.querySelector('.truncate');
-                const name = nameDiv ? nameDiv.textContent.trim() : id; 
-                if (!select.querySelector(`option[value="${id}"]`)) {
-                    const opt = document.createElement('option');
-                    opt.value = id; opt.textContent = name; select.appendChild(opt);
+                const name = nameDiv ? nameDiv.textContent.trim() : shortUrl; 
+                // Avoid duplicates
+                if (!projects.find(p => p.shortUrl === shortUrl)) {
+                    projects.push({ shortUrl, name, source: 'dom' });
                 }
             }
         });
     } catch (e) {
-        console.warn("Scan failed", e);
+        console.warn("[BulkExport] DOM scan failed", e);
     }
+    return projects;
 }
 
 
 // --- Logic: Start ---
 async function startNewExport() {
-    const projectId = document.getElementById('bulk-project-select').value;
+    const projectId = getSelectedProject();
+    
+    if (!projectId) {
+        alert('Please select a project first.');
+        return;
+    }
     
     // 1. Get Settings
     const settings = await chrome.storage.sync.get(['filenamePattern', 'frontmatterTemplate', 'defaultTags']);
@@ -427,6 +780,17 @@ async function startNewExport() {
 }
 
 // --- Logic: Resume / Auto-Run ---
+// Helper to wait for elements
+async function waitForSelector(selector, timeout = 10000) {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+        const el = document.querySelector(selector);
+        if (el) return el;
+        await new Promise(r => setTimeout(r, 500));
+    }
+    return null;
+}
+
 // Called on page load
 async function checkAndResume() {
     const data = await chrome.storage.local.get(['automationState']);
@@ -438,20 +802,19 @@ async function checkAndResume() {
 
     // Dispatch based on mode/step
     if (state.mode === 'initializing') {
-        // We just arrived at project page (hopefully)
+        // We just arrived at project page
         state.mode = 'scanning';
         await chrome.storage.local.set({ automationState: state });
-        // Allow page to load
-        setTimeout(() => scanAndQueue(state), 2000);
+        scanAndQueue(state);
     } 
     else if (state.mode === 'scanning') {
-         // Should not happen unless we reloaded during scan. Retry scan.
          scanAndQueue(state);
     }
     else if (state.mode === 'processing') {
-         // Wait for page load before scraping
-         updateStatusUI(`Waiting for page load...`);
-         setTimeout(() => processCurrentItem(state), 2500);
+         updateStatusUI(`Waiting for page content...`);
+         // Wait for actual conversation content to appear
+         await waitForSelector('.prose', 10000);
+         processCurrentItem(state);
     }
     else if (state.mode === 'finished') {
          // UI already shows finished state
@@ -461,6 +824,17 @@ async function checkAndResume() {
 
 // --- Step: Scan ---
 async function scanAndQueue(state) {
+    updateStatusUI("Waiting for page content...");
+    
+    // Determine container
+    const isProject = window.location.href.includes('/project');
+    const selector = isProject ? 'div[data-scroll-root="true"]' : 'nav[aria-label="チャット履歴"]';
+    
+    const container = await waitForSelector(selector, 15000);
+    
+    // Give a little more time for links to render
+    await new Promise(r => setTimeout(r, 1500));
+
     updateStatusUI("Scanning for conversations...");
     
     await scrollAndCollectLinks(state);
@@ -495,11 +869,19 @@ async function scrollAndCollectLinks(state) {
     }
 
     if (!container) {
-        console.warn("No scroll container found. Using visible links only.");
+        // No container found, will fallback to searching the whole document later
     }
     
     const collectedIds = new Set();
     const queue = [];
+
+    // Wait for at least one link to appear before starting scroll (up to 5s)
+    let checkScope = isProject ? (document.querySelector('main') || document) : (container || document);
+    for (let j=0; j<10; j++) {
+        const initialLinks = checkScope.querySelectorAll('a[href*="/c/"]');
+        if (initialLinks.length > 0) break;
+        await new Promise(r => setTimeout(r, 1000));
+    }
 
     // Simple scroll loop
     let previousHeight = 0;
