@@ -33,6 +33,7 @@
         "https://chat.openai.com/*"
       ],
       "js": [
+        "scripts/file_saver.js",
         "scripts/markdown_converter.js",
         "scripts/content.js"
       ]

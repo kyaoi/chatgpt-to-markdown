@@ -229,23 +229,14 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsText(file);
     });
 
-    // Helper: Generate Filename
+    const fileSaver = new FileSaver();
+
+    // Helper: Generate Filename (Delegated to FileSaver)
     function generateFilename(pattern, title) {
-        const date = new Date();
-        const dateStr = date.toISOString().split('T')[0];
-        const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
-        const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim().substring(0, 100);
-
-        let filename = pattern
-            .replace('{title}', safeTitle)
-            .replace('{date}', dateStr)
-            .replace('{time}', timeStr)
-            .replace('{id}', Date.now().toString());
-
-        if (!filename.endsWith('.md')) {
-            filename += '.md';
-        }
-        return filename;
+        // Use pattern from storage or default
+        // We need to fetch pattern first usually, but here we just wrap for convenience or use direct call
+        // Actually, let's keep it simple and just use fileSaver.generateFilename where needed.
+        return fileSaver.generateFilename(pattern, title, Date.now().toString());
     }
 
     function saveMarkdownDirect(rawMarkdown, title, url, dirHandle, filename) {
@@ -255,87 +246,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 defaultTags: DEFAULT_TAGS,
                 frontmatterTemplate: DEFAULT_FRONTMATTER
              }, async (settings) => {
-                 let finalMarkdown = rawMarkdown;
-                 const template = settings.frontmatterTemplate;
-                 const defaultTags = settings.defaultTags;
-                 
-                 // --- Frontmatter Processing ---
-                 if (template && template.trim() !== '') {
-                     const date = new Date();
-                     const dateStr = date.toISOString().split('T')[0];
-                     const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
-                     const safeTitle = (title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
-                     const displayFolderName = dirHandle.name;
-
-                     // Variable Substitution for Tags
-                     let processedTags = defaultTags || '';
-                     processedTags = processedTags
-                             .replace(/{title}/g, safeTitle)
-                             .replace(/{date}/g, dateStr)
-                             .replace(/{time}/g, timeStr)
-                             .replace(/{folder}/g, displayFolderName);
-                     
-                     // Format tags as [tag1, tag2]
-                     const tagArrayString = '[' + processedTags.split(',').map(t => t.trim()).filter(Boolean).join(', ') + ']';
-
-                     const frontmatter = template
-                        .replace(/{folder}/g, displayFolderName)
-                        .replace(/{title}/g, safeTitle)
-                        .replace(/{url}/g, url || '')
-                        .replace(/{date}/g, dateStr)
-                        .replace(/{time}/g, timeStr)
-                        .replace(/{tags}/g, tagArrayString);
-                     
-                     finalMarkdown = frontmatter + rawMarkdown;
-                 }
-
-                 // --- File Writing Logic ---
                  try {
-                    // Image Extraction
-                    const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
-                    const matches = [...finalMarkdown.matchAll(imgRegex)];
-                    
-                    if (matches.length > 0) {
-                        try {
-                            const imagesDir = await dirHandle.getDirectoryHandle('images', { create: true });
-                            let imgCount = 0;
-                            const baseName = filename.replace('.md', '');
+                     const date = new Date();
+                     const metadata = {
+                         title: title,
+                         url: url,
+                         date: date.toISOString().split('T')[0],
+                         time: date.toTimeString().split(' ')[0].replace(/:/g, ''),
+                         id: Date.now().toString()
+                     };
 
-                            for (const match of matches) {
-                                try {
-                                    const fullMatch = match[0];
-                                    const alt = match[1];
-                                    const dataURI = match[2];
-                                    const ext = match[3] === 'jpeg' ? 'jpg' : match[3];
-                                    
-                                    const imgFilename = `${baseName}_img${imgCount}.${ext}`;
-                                    const blob = dataURItoBlob(dataURI);
-                                    
-                                    const imgHandle = await imagesDir.getFileHandle(imgFilename, { create: true });
-                                    const writable = await imgHandle.createWritable();
-                                    await writable.write(blob);
-                                    await writable.close();
-                                    
-                                    finalMarkdown = finalMarkdown.replace(fullMatch, `![[images/${imgFilename}]]`);
-                                    imgCount++;
-                                } catch (imgErr) {
-                                    console.error("Popup: Failed to save extracted image", imgErr);
-                                }
-                            }
-                        } catch (dirErr) {
-                            console.error("Popup: Failed to create images directory", dirErr);
-                            statusMsg.textContent = 'Warning: Could not save images.';
-                        }
-                    }
+                     await fileSaver.saveMarkdown(dirHandle, filename, rawMarkdown, {
+                         frontmatterTemplate: settings.frontmatterTemplate,
+                         defaultTags: settings.defaultTags,
+                         metadata: metadata
+                     });
 
-                    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(finalMarkdown);
-                    await writable.close();
-
-                    statusMsg.textContent = `Saved to ${dirHandle.name}!`;
-                    setTimeout(() => statusMsg.textContent = '', 3000);
-                    resolve();
+                     statusMsg.textContent = `Saved to ${dirHandle.name}!`;
+                     setTimeout(() => statusMsg.textContent = '', 3000);
+                     resolve();
 
                  } catch (e) {
                      console.error("Save Error:", e);
@@ -352,17 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-// Helper: Convert Base64 DataURI to Blob (Duplicate from content.js for standalone popup)
-function dataURItoBlob(dataURI) {
-    const byteString = atob(dataURI.split(',')[1]);
-    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i);
-    }
-    return new Blob([ab], {type: mimeString});
-}
+    // Helper: dataURItoBlob removed (handled in FileSaver)
 
 
     // Event Listeners
