@@ -62,10 +62,10 @@ class MarkdownConverter {
                     if (codeBlock) {
                         const langClass = Array.from(codeBlock.classList).find(c => c.startsWith('language-'));
                         const lang = langClass ? langClass.replace('language-', '') : '';
-                        text += "\n```" + lang + "\n" + codeBlock.innerText + "\n```\n\n";
+                        text += "\n```" + lang + "\n" + codeBlock.textContent + "\n```\n\n";
                     } else {
                          // Fallback
-                         text += "\n```\n" + child.innerText + "\n```\n\n";
+                         text += "\n```\n" + child.textContent + "\n```\n\n";
                     }
                     return; 
                 }
