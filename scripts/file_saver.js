@@ -72,8 +72,10 @@ class FileSaver {
     async _writeFile(dirHandle, filename, content) {
         try {
             const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(content);
+            const writable = await fileHandle.createWritable({ keepExistingData: true });
+            const blob = new Blob([content], { type: 'text/markdown' });
+            await writable.write({ type: 'write', position: 0, data: blob });
+            await writable.truncate(blob.size);
             await writable.close();
         } catch (e) {
             // Fallback logic if filename is invalid
@@ -84,9 +86,11 @@ class FileSaver {
              console.log(`FileSaver: Retrying with ${safeName}`);
              
              const fileHandle = await dirHandle.getFileHandle(safeName, { create: true });
-             const writable = await fileHandle.createWritable();
-             // Prepend original filename hint
-             await writable.write(`<!-- Original Filename: ${filename} -->\n` + content);
+             const writable = await fileHandle.createWritable({ keepExistingData: true });
+             const backupContent = `<!-- Original Filename: ${filename} -->\n` + content;
+             const blob = new Blob([backupContent], { type: 'text/markdown' });
+             await writable.write({ type: 'write', position: 0, data: blob });
+             await writable.truncate(blob.size);
              await writable.close();
         }
     }
