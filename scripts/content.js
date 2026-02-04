@@ -11,11 +11,11 @@ let bulkUI = null;
 
 // Create and inject the overlay UI
 function createBulkUI(initialState = null) {
-    if (bulkUI) return;
+	if (bulkUI) return;
 
-    // Inject styles (Modern / Glassmorphism with Modal)
-    const style = document.createElement('style');
-    style.textContent = `
+	// Inject styles (Modern / Glassmorphism with Modal)
+	const style = document.createElement("style");
+	style.textContent = `
         :root {
             --ctm-bg: #202123;
             --ctm-card: #2d2f33;
@@ -172,20 +172,64 @@ function createBulkUI(initialState = null) {
         
         /* Hide when not in controls mode */
         #bulk-controls.hidden { display: none; }
+
+        /* Minimized State (Bottom Right Toast) */
+        #chatgpt-to-md-bulk-panel.ctm-minimized {
+            top: auto !important;
+            left: auto !important;
+            bottom: 24px !important;
+            right: 24px !important;
+            transform: none !important;
+            width: 340px !important;
+            max-height: 400px !important;
+            border-radius: 8px !important;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;
+            animation: ctm-slide-up 0.3s ease forwards;
+        }
+        @keyframes ctm-slide-up {
+             from { transform: translateY(20px); opacity: 0; }
+             to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* Adjustments for minimized view */
+        .ctm-minimized #chatgpt-to-md-bulk-header {
+            padding: 10px 16px;
+            background: #25262b;
+        }
+        .ctm-minimized #chatgpt-to-md-bulk-header h3 {
+            font-size: 14px;
+        }
+        .ctm-minimized #chatgpt-to-md-bulk-body {
+            padding: 12px 16px;
+            gap: 10px;
+        }
+        .ctm-minimized #bulk-status-container {
+            border: none;
+            background: transparent;
+            padding: 0;
+        }
+        .ctm-minimized #bulk-status-text {
+            min-height: 50px;
+            max-height: 120px;
+            font-size: 11px;
+        }
     `;
-    document.head.appendChild(style);
+	document.head.appendChild(style);
 
-    // Create overlay
-    const overlay = document.createElement('div');
-    overlay.id = 'chatgpt-to-md-overlay';
-    document.body.appendChild(overlay);
+	// Create overlay
+	const overlay = document.createElement("div");
+	overlay.id = "chatgpt-to-md-overlay";
+	document.body.appendChild(overlay);
 
-    const div = document.createElement('div');
-    div.id = 'chatgpt-to-md-bulk-panel';
-    div.innerHTML = `
+	const div = document.createElement("div");
+	div.id = "chatgpt-to-md-bulk-panel";
+	div.innerHTML = `
         <div id="chatgpt-to-md-bulk-header">
             <h3>📦 Export Manager</h3>
-            <button id="bulk-close-btn" class="ctm-icon-btn" title="Close">✕</button>
+            <div style="display:flex; gap:8px;">
+                 <!-- Restore button could go here -->
+                 <button id="bulk-close-btn" class="ctm-icon-btn" title="Close" style="padding:4px 8px;">✕</button>
+            </div>
         </div>
         <div id="chatgpt-to-md-bulk-body">
             <div id="bulk-controls">
@@ -216,130 +260,170 @@ function createBulkUI(initialState = null) {
             </div>
 
             <div id="bulk-status-container" style="display: none;">
-                <label class="ctm-label">Status Log</label>
+                <!-- <label class="ctm-label">Status</label> -->
                 <div id="bulk-status-text">Initializing...</div>
-                <div style="display:flex; gap:10px; margin-top:16px;">
-                    <button id="bulk-stop-btn" class="ctm-btn ctm-danger" style="flex:0 0 auto; padding: 10px 20px;">Stop</button>
-                    <button id="bulk-save-btn" class="ctm-btn ctm-primary" style="display:none;">Finalize & Save</button>
+                <div style="display:flex; gap:10px; margin-top:12px;">
+                    <button id="bulk-stop-btn" class="ctm-btn ctm-danger" style="flex:1; padding: 8px;">Stop</button>
+                    <button id="bulk-save-btn" class="ctm-btn ctm-primary" style="display:none; flex:1; padding: 8px;">Save</button>
                 </div>
             </div>
         </div>
     `;
 
+	document.body.appendChild(div);
+	bulkUI = div;
 
-    document.body.appendChild(div);
-    bulkUI = div;
+	// Close function
+	const closeUI = () => {
+		const overlay = document.getElementById("chatgpt-to-md-overlay");
+		div.style.opacity = "0";
+		if (!div.classList.contains("ctm-minimized")) {
+			div.style.transform = "translate(-50%, -50%) scale(0.95)";
+		} else {
+			div.style.transform = "translateY(20px)";
+		}
 
-    // Close function
-    const closeUI = () => {
-        const overlay = document.getElementById('chatgpt-to-md-overlay');
-        div.style.opacity = '0';
-        div.style.transform = 'translate(-50%, -50%) scale(0.95)';
-        if (overlay) overlay.style.opacity = '0';
-        setTimeout(() => {
-            div.remove();
-            if (overlay) overlay.remove();
-            bulkUI = null;
-        }, 300);
-    };
+		if (overlay) overlay.style.opacity = "0";
+		setTimeout(() => {
+			div.remove();
+			if (overlay) overlay.remove();
+			bulkUI = null;
+		}, 300);
+	};
 
-    // Event Listeners
-    div.querySelector('#bulk-close-btn').addEventListener('click', closeUI);
-    overlay.addEventListener('click', closeUI);
+	// Event Listeners
+	div.querySelector("#bulk-close-btn").addEventListener("click", closeUI);
+	overlay.addEventListener("click", closeUI);
 
-    div.querySelector('#bulk-start-btn').addEventListener('click', startNewExport);
-    
-    div.querySelector('#bulk-stop-btn').addEventListener('click', async () => {
-        if (confirm("Stop export process? (Progress saved in memory)")) {
-            await chrome.storage.local.set({ automationState: { isRunning: false } });
-            window.location.reload();
-        }
-    });
+	div
+		.querySelector("#bulk-start-btn")
+		.addEventListener("click", startNewExport);
 
-    div.querySelector('#bulk-save-btn').addEventListener('click', saveAllToDisk);
+	div.querySelector("#bulk-stop-btn").addEventListener("click", async () => {
+		if (confirm("Stop export process? (Progress saved in memory)")) {
+			await chrome.storage.local.set({ automationState: { isRunning: false } });
+			window.location.reload();
+		}
+	});
 
-    // Search functionality
-    const searchInput = div.querySelector('#bulk-project-search');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            const items = div.querySelectorAll('.ctm-project-item');
-            items.forEach(item => {
-                const name = item.querySelector('.ctm-project-name')?.textContent.toLowerCase() || '';
-                item.style.display = name.includes(query) ? 'flex' : 'none';
-            });
-        });
-    }
+	div.querySelector("#bulk-save-btn").addEventListener("click", saveAllToDisk);
 
-    // Refresh button
-    const refreshBtn = div.querySelector('#bulk-refresh-btn');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', async () => {
-            refreshBtn.style.animation = 'spin 1s linear infinite';
-            refreshBtn.style.transformOrigin = 'center';
-            
-            // Clear cache and reload
-            if (typeof projectInterceptor !== 'undefined') {
-                await projectInterceptor.clearCache();
-            }
-            
-            // Trigger a page reload to re-capture API responses
-            // Or just re-fetch from DOM as fallback
-            await fetchProjects();
-            
-            refreshBtn.style.animation = '';
-        });
-    }
+	// Search functionality
+	const searchInput = div.querySelector("#bulk-project-search");
+	if (searchInput) {
+		searchInput.addEventListener("input", (e) => {
+			const query = e.target.value.toLowerCase();
+			const items = div.querySelectorAll(".ctm-project-item");
+			items.forEach((item) => {
+				const name =
+					item.querySelector(".ctm-project-name")?.textContent.toLowerCase() ||
+					"";
+				item.style.display = name.includes(query) ? "flex" : "none";
+			});
+		});
+	}
 
-    // Initial Load
-    fetchProjects();
+	// Refresh button
+	const refreshBtn = div.querySelector("#bulk-refresh-btn");
+	if (refreshBtn) {
+		refreshBtn.addEventListener("click", async () => {
+			refreshBtn.style.animation = "spin 1s linear infinite";
+			refreshBtn.style.transformOrigin = "center";
 
-    if (initialState && initialState.isRunning) {
-        showRunningState(initialState);
-    } else if (initialState && initialState.results && initialState.queue && initialState.currentIndex >= initialState.queue.length) {
-        // Finished state
-        showFinishedState(initialState);
-    }
+			// Clear cache and reload
+			if (typeof projectInterceptor !== "undefined") {
+				await projectInterceptor.clearCache();
+			}
+
+			// Trigger a page reload to re-capture API responses
+			// Or just re-fetch from DOM as fallback
+			await fetchProjects();
+
+			refreshBtn.style.animation = "";
+		});
+	}
+
+	// Initial Load
+	fetchProjects();
+
+	// Check state and restore UI
+	if (initialState) {
+		if (
+			initialState.isRunning ||
+			(initialState.results &&
+				initialState.queue &&
+				initialState.currentIndex >= initialState.queue.length)
+		) {
+			// Auto-minimize if running or finished
+			const panel = document.getElementById("chatgpt-to-md-bulk-panel");
+			const overlay = document.getElementById("chatgpt-to-md-overlay");
+			if (panel) panel.classList.add("ctm-minimized");
+			if (overlay) overlay.style.display = "none";
+		}
+
+		if (initialState.isRunning) {
+			showRunningState(initialState);
+		} else if (
+			initialState.results &&
+			initialState.queue &&
+			initialState.currentIndex >= initialState.queue.length
+		) {
+			showFinishedState(initialState);
+		}
+	}
 }
 
 function showRunningState(state) {
-    const projectSelect = document.getElementById('bulk-controls');
-    const statusContainer = document.getElementById('bulk-status-container');
-    const statusText = document.getElementById('bulk-status-text');
-    
-    if (projectSelect) projectSelect.style.display = 'none';
-    if (statusContainer) statusContainer.style.display = 'block';
-    
-    const total = state.queue ? state.queue.length : 0;
-    const current = state.currentIndex || 0;
-    const errors = state.errors || 0;
-    
-    if (statusText) statusText.textContent = `Processing: ${current}/${total}\nErrors: ${errors}\n(Do not close this tab)`;
+	const projectSelect = document.getElementById("bulk-controls");
+	const statusContainer = document.getElementById("bulk-status-container");
+	const statusText = document.getElementById("bulk-status-text");
+	const overlay = document.getElementById("chatgpt-to-md-overlay");
+	const panel = document.getElementById("chatgpt-to-md-bulk-panel");
+
+	if (projectSelect) projectSelect.style.display = "none";
+	if (statusContainer) statusContainer.style.display = "block";
+
+	// Switch to Minimized
+	if (panel) panel.classList.add("ctm-minimized");
+	if (overlay) overlay.style.display = "none";
+
+	const total = state.queue ? state.queue.length : 0;
+	const current = state.currentIndex || 0;
+	const errors = state.errors || 0;
+
+	if (statusText)
+		statusText.textContent = `Processing: ${current}/${total}\nErrors: ${errors}`;
 }
 
 function showFinishedState(state) {
-    const projectSelect = document.getElementById('bulk-controls');
-    const statusContainer = document.getElementById('bulk-status-container');
-    const statusText = document.getElementById('bulk-status-text');
-    const stopBtn = document.getElementById('bulk-stop-btn');
-    const saveBtn = document.getElementById('bulk-save-btn');
-    
-    if (projectSelect) projectSelect.style.display = 'none';
-    if (statusContainer) statusContainer.style.display = 'block';
-    if (stopBtn) stopBtn.style.display = 'none';
-    if (saveBtn) saveBtn.style.display = 'flex';
+	const projectSelect = document.getElementById("bulk-controls");
+	const statusContainer = document.getElementById("bulk-status-container");
+	const statusText = document.getElementById("bulk-status-text");
+	const stopBtn = document.getElementById("bulk-stop-btn");
+	const saveBtn = document.getElementById("bulk-save-btn");
+	const overlay = document.getElementById("chatgpt-to-md-overlay");
+	const panel = document.getElementById("chatgpt-to-md-bulk-panel");
 
-    // Add Tags Input if not present
-    let tagsContainer = document.getElementById('bulk-tags-container');
-    if (!tagsContainer) {
-        tagsContainer = document.createElement('div');
-        tagsContainer.id = 'bulk-tags-container';
-        tagsContainer.style.marginTop = '12px';
-        tagsContainer.style.width = '100%';
-        
-        // CSS for Chips and Input
-        const style = document.createElement('style');
-        style.textContent = `
+	// Switch to Minimized
+	if (panel) panel.classList.add("ctm-minimized");
+	if (overlay) overlay.style.display = "none";
+
+	if (projectSelect) projectSelect.style.display = "none";
+	if (statusContainer) statusContainer.style.display = "block";
+	if (stopBtn) stopBtn.style.display = "none";
+	if (saveBtn) saveBtn.style.display = "flex";
+
+	// Add Tags Input if not present
+	let tagsContainer = document.getElementById("bulk-tags-container");
+	if (!tagsContainer) {
+		tagsContainer = document.createElement("div");
+		tagsContainer.id = "bulk-tags-container";
+		tagsContainer.style.marginTop = "12px";
+		tagsContainer.style.width = "100%";
+
+		// CSS for Chips and Input
+		const style = document.createElement("style");
+		style.textContent = `
             .ctm-tag-container {
                 display: flex;
                 flex-wrap: wrap;
@@ -403,9 +487,9 @@ function showFinishedState(state) {
                 display: none !important;
             }
         `;
-        document.head.appendChild(style);
+		document.head.appendChild(style);
 
-        tagsContainer.innerHTML = `
+		tagsContainer.innerHTML = `
             <label class="ctm-label" style="display:block; margin-bottom:4px;">Tags (One by one)</label>
             <div class="ctm-tag-container" id="ctm-tag-wrapper">
                 <input type="text" id="bulk-tags-input" class="ctm-tag-input" placeholder="Type & Enter (e.g. AI, {date})">
@@ -420,169 +504,179 @@ function showFinishedState(state) {
                     <span class="ctm-var-chip" data-val="{url}">{url}</span>
                 </div>
             </div>
-            <input type="hidden" id="bulk-tags-hidden-value" value="${state.settings.defaultTags || ''}">
+            <input type="hidden" id="bulk-tags-hidden-value" value="${state.settings.defaultTags || ""}">
         `;
-        
-        // Insert before buttons
-        saveBtn.parentElement.before(tagsContainer);
 
-        // --- Logic for Chip UI ---
-        const wrapper = tagsContainer.querySelector('#ctm-tag-wrapper');
-        const input = tagsContainer.querySelector('#bulk-tags-input');
-        const hiddenVal = tagsContainer.querySelector('#bulk-tags-hidden-value');
-        const varList = tagsContainer.querySelector('#ctm-variable-list');
-        
-        let tags = (state.settings.defaultTags || '').split(',').map(s => s.trim()).filter(Boolean);
+		// Insert before buttons
+		saveBtn.parentElement.before(tagsContainer);
 
-        function renderTags() {
-            // clear wrapper except input
-           const chips = wrapper.querySelectorAll('.ctm-tag-chip');
-           chips.forEach(c => c.remove());
-           
-           tags.forEach((tag, idx) => {
-               const chip = document.createElement('div');
-               chip.className = 'ctm-tag-chip';
-               chip.innerHTML = `${tag} <span class="remove">&times;</span>`;
-               chip.querySelector('.remove').onclick = () => {
-                   tags.splice(idx, 1);
-                   update();
-               };
-               wrapper.insertBefore(chip, input);
-           });
-        }
+		// --- Logic for Chip UI ---
+		const wrapper = tagsContainer.querySelector("#ctm-tag-wrapper");
+		const input = tagsContainer.querySelector("#bulk-tags-input");
+		const hiddenVal = tagsContainer.querySelector("#bulk-tags-hidden-value");
+		const varList = tagsContainer.querySelector("#ctm-variable-list");
 
-        function update() {
-            renderTags();
-            hiddenVal.value = tags.join(', ');
-            input.focus();
-        }
+		const tags = (state.settings.defaultTags || "")
+			.split(",")
+			.map((s) => s.trim())
+			.filter(Boolean);
 
-        // Variable Click Handler
-        varList.querySelectorAll('.ctm-var-chip').forEach(chip => {
-            chip.addEventListener('click', () => {
-                const val = chip.getAttribute('data-val');
-                // Insert at cursor position or append
-                const start = input.selectionStart;
-                const end = input.selectionEnd;
-                const text = input.value;
-                input.value = text.substring(0, start) + val + text.substring(end);
-                input.focus();
-                // Move cursor after inserted text
-                input.selectionStart = input.selectionEnd = start + val.length;
-            });
-        });
+		function renderTags() {
+			// clear wrapper except input
+			const chips = wrapper.querySelectorAll(".ctm-tag-chip");
+			chips.forEach((c) => c.remove());
 
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault();
-                const val = input.value.trim().replace(/^,|,$/g, '');
-                if (val) {
-                    tags.push(val);
-                    input.value = ''; // Clear input only on enter
-                    update();
-                }
-            }
-            if (e.key === 'Backspace' && !input.value && tags.length > 0) {
-                tags.pop();
-                update();
-            }
-        });
+			tags.forEach((tag, idx) => {
+				const chip = document.createElement("div");
+				chip.className = "ctm-tag-chip";
+				chip.innerHTML = `${tag} <span class="remove">&times;</span>`;
+				chip.querySelector(".remove").onclick = () => {
+					tags.splice(idx, 1);
+					update();
+				};
+				wrapper.insertBefore(chip, input);
+			});
+		}
 
-        // Initial render
-        renderTags();
-    }
+		function update() {
+			renderTags();
+			hiddenVal.value = tags.join(", ");
+			input.focus();
+		}
 
-    const count = Object.keys(state.results || {}).length;
-    if (statusText) statusText.textContent = `Completed!\nReady to save ${count} files.\nCustomize tags below if needed.`;
+		// Variable Click Handler
+		varList.querySelectorAll(".ctm-var-chip").forEach((chip) => {
+			chip.addEventListener("click", () => {
+				const val = chip.getAttribute("data-val");
+				// Insert at cursor position or append
+				const start = input.selectionStart;
+				const end = input.selectionEnd;
+				const text = input.value;
+				input.value = text.substring(0, start) + val + text.substring(end);
+				input.focus();
+				// Move cursor after inserted text
+				input.selectionStart = input.selectionEnd = start + val.length;
+			});
+		});
+
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Enter" || e.key === ",") {
+				e.preventDefault();
+				const val = input.value.trim().replace(/^,|,$/g, "");
+				if (val) {
+					tags.push(val);
+					input.value = ""; // Clear input only on enter
+					update();
+				}
+			}
+			if (e.key === "Backspace" && !input.value && tags.length > 0) {
+				tags.pop();
+				update();
+			}
+		});
+
+		// Initial render
+		renderTags();
+	}
+
+	const count = Object.keys(state.results || {}).length;
+	if (statusText)
+		statusText.textContent = `Completed!\nReady to save ${count} files.\nCustomize tags below if needed.`;
 }
-
 
 // --- Project Intercept Integration ---
 const projectInterceptor = {
-    cache: new Map(),
-    lastUpdated: null,
-    listeners: [],
+	cache: new Map(),
+	lastUpdated: null,
+	listeners: [],
 
-    subscribe(fn) {
-        this.listeners.push(fn);
-        return () => {
-            this.listeners = this.listeners.filter(l => l !== fn);
-        };
-    },
-    
-    clearListeners() {
-        this.listeners = [];
-    },
-    
-    notify() {
-        const projects = this.getProjects();
-        const stats = this.getStats();
-        this.listeners.forEach(fn => fn(projects, stats));
-    },
+	subscribe(fn) {
+		this.listeners.push(fn);
+		return () => {
+			this.listeners = this.listeners.filter((l) => l !== fn);
+		};
+	},
 
-    getProjects() {
-        return Array.from(this.cache.values()).sort((a, b) => a.name.localeCompare(b.name));
-    },
-    
-    getStats() {
-        return { 
-            cacheAge: this.lastUpdated ? Math.floor((Date.now() - this.lastUpdated) / 1000) : 0,
-            totalProjects: this.cache.size 
-        };
-    },
-    
-    addProjects(projects) {
-         projects.forEach(p => this.cache.set(p.shortUrl, p));
-         this.lastUpdated = Date.now();
-         this.saveCache();
-         this.notify();
-    },
-    
-    async saveCache() {
-         await chrome.storage.local.set({ 
-             projectCache: { 
-                 projects: Array.from(this.cache.values()), 
-                 lastUpdated: this.lastUpdated 
-             } 
-         });
-    },
-    
-    async loadCache() {
-        try {
-            const data = await chrome.storage.local.get(['projectCache']);
-            if (data.projectCache?.projects) {
-                 data.projectCache.projects.forEach(p => this.cache.set(p.shortUrl, p));
-                 this.lastUpdated = data.projectCache.lastUpdated;
-            }
-        } catch(e) {}
-    },
-    
-    async clearCache() {
-        this.cache.clear();
-        this.lastUpdated = null;
-        await chrome.storage.local.remove(['projectCache']);
-        this.notify();
-    }
+	clearListeners() {
+		this.listeners = [];
+	},
+
+	notify() {
+		const projects = this.getProjects();
+		const stats = this.getStats();
+		this.listeners.forEach((fn) => fn(projects, stats));
+	},
+
+	getProjects() {
+		return Array.from(this.cache.values()).sort((a, b) =>
+			a.name.localeCompare(b.name),
+		);
+	},
+
+	getStats() {
+		return {
+			cacheAge: this.lastUpdated
+				? Math.floor((Date.now() - this.lastUpdated) / 1000)
+				: 0,
+			totalProjects: this.cache.size,
+		};
+	},
+
+	addProjects(projects) {
+		projects.forEach((p) => this.cache.set(p.shortUrl, p));
+		this.lastUpdated = Date.now();
+		this.saveCache();
+		this.notify();
+	},
+
+	async saveCache() {
+		await chrome.storage.local.set({
+			projectCache: {
+				projects: Array.from(this.cache.values()),
+				lastUpdated: this.lastUpdated,
+			},
+		});
+	},
+
+	async loadCache() {
+		try {
+			const data = await chrome.storage.local.get(["projectCache"]);
+			if (data.projectCache?.projects) {
+				data.projectCache.projects.forEach((p) =>
+					this.cache.set(p.shortUrl, p),
+				);
+				this.lastUpdated = data.projectCache.lastUpdated;
+			}
+		} catch (e) {}
+	},
+
+	async clearCache() {
+		this.cache.clear();
+		this.lastUpdated = null;
+		await chrome.storage.local.remove(["projectCache"]);
+		this.notify();
+	},
 };
 
 // Listen for messages from Main World
-window.addEventListener('message', (event) => {
-    if (event.data?.type === 'CTM_PROJECT_DATA') {
-        projectInterceptor.addProjects(event.data.payload);
-    }
+window.addEventListener("message", (event) => {
+	if (event.data?.type === "CTM_PROJECT_DATA") {
+		projectInterceptor.addProjects(event.data.payload);
+	}
 });
 
 // Inject Interceptor Script
 try {
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('scripts/project_interceptor.js');
-    script.onload = function() { this.remove(); };
-    (document.head || document.documentElement).appendChild(script);
+	const script = document.createElement("script");
+	script.src = chrome.runtime.getURL("scripts/project_interceptor.js");
+	script.onload = function () {
+		this.remove();
+	};
+	(document.head || document.documentElement).appendChild(script);
 } catch (e) {}
 
 // Init cache
 projectInterceptor.loadCache();
-
 
 // --- Project Discovery ---
 // Store selected project
@@ -590,632 +684,711 @@ let selectedProject = null;
 
 // Helper to render project list
 function renderProjectList(projects) {
-    const projectList = document.getElementById('bulk-project-list');
-    const countEl = document.getElementById('bulk-project-count');
-    if (!projectList) return;
+	const projectList = document.getElementById("bulk-project-list");
+	const countEl = document.getElementById("bulk-project-count");
+	if (!projectList) return;
 
-    projectList.innerHTML = '';
-    
-    // Add Personal option first
-    const personalItem = createProjectItem({
-        shortUrl: 'personal',
-        name: 'Personal / Current Context',
-        isPersonal: true
-    });
-    projectList.appendChild(personalItem);
-    
-    // Add all projects
-    projects.forEach(project => {
-        const item = createProjectItem(project);
-        projectList.appendChild(item);
-    });
+	projectList.innerHTML = "";
 
-    // Update count
-    if (countEl) {
-        countEl.textContent = `Found: ${projects.length} projects`;
-    }
+	// Add Personal option first
+	const personalItem = createProjectItem({
+		shortUrl: "personal",
+		name: "Personal / Current Context",
+		isPersonal: true,
+	});
+	projectList.appendChild(personalItem);
+
+	// Add all projects
+	projects.forEach((project) => {
+		const item = createProjectItem(project);
+		projectList.appendChild(item);
+	});
+
+	// Update count
+	if (countEl) {
+		countEl.textContent = `Found: ${projects.length} projects`;
+	}
 }
 
 async function fetchProjects() {
-    const projectList = document.getElementById('bulk-project-list');
-    
-    if (!projectList) return;
+	const projectList = document.getElementById("bulk-project-list");
 
-    // Reset list logic - clear old listeners
-    projectInterceptor.clearListeners();
-    
-    // Subscribe to future updates (Real-time from sidebar/fetch)
-    projectInterceptor.subscribe((newProjects) => {
-        renderProjectList(newProjects);
-    });
+	if (!projectList) return;
 
-    // Initial check
-    let projects = projectInterceptor.getProjects();
-    
-    if (projects.length === 0) {
-        projectList.innerHTML = `
+	// Reset list logic - clear old listeners
+	projectInterceptor.clearListeners();
+
+	// Subscribe to future updates (Real-time from sidebar/fetch)
+	projectInterceptor.subscribe((newProjects) => {
+		renderProjectList(newProjects);
+	});
+
+	// Initial check
+	const projects = projectInterceptor.getProjects();
+
+	if (projects.length === 0) {
+		projectList.innerHTML = `
             <div style="text-align: center; padding: 40px; color: var(--ctm-sub);">
                 Loading projects...<br>
                 <div style="font-size:0.9em; margin-top:8px; opacity:0.8;">(Try expanding 'Show More' in Sidebar)</div>
             </div>
         `;
-        
-        // Wait and fallback to DOM
-        setTimeout(() => {
-            // Check again
-            const currentProjs = projectInterceptor.getProjects();
-            if (currentProjs.length === 0) {
-                 const scanned = scanProjectsFromDOM();
-                 if (scanned.length > 0) {
-                     projectInterceptor.addProjects(scanned);
-                 } else {
-                     projectList.innerHTML = `
+
+		// Wait and fallback to DOM
+		setTimeout(() => {
+			// Check again
+			const currentProjs = projectInterceptor.getProjects();
+			if (currentProjs.length === 0) {
+				const scanned = scanProjectsFromDOM();
+				if (scanned.length > 0) {
+					projectInterceptor.addProjects(scanned);
+				} else {
+					projectList.innerHTML = `
                         <div style="text-align: center; padding: 40px; color: var(--ctm-sub);">
                             No projects found yet.<br>
                             Please find and click project in sidebar.
                         </div>
                      `;
-                 }
-            } else {
-                renderProjectList(currentProjs);
-            }
-        }, 2000);
-    } else {
-        renderProjectList(projects);
-    }
+				}
+			} else {
+				renderProjectList(currentProjs);
+			}
+		}, 2000);
+	} else {
+		renderProjectList(projects);
+	}
 
-    // Select first item by default if none selected
-    if (!selectedProject) {
-        selectProject('personal');
-    }
+	// Select first item by default if none selected
+	if (!selectedProject) {
+		selectProject("personal");
+	}
 }
 
 // Create a project item element
 function createProjectItem(project) {
-    const div = document.createElement('div');
-    div.className = `ctm-project-item${project.isPersonal ? ' ctm-project-personal' : ''}`;
-    div.dataset.shortUrl = project.shortUrl;
-    
-    // Get first letter for icon
-    const initial = project.name.charAt(0).toUpperCase();
-    
-    div.innerHTML = `
-        <div class="ctm-project-icon">${project.isPersonal ? '👤' : initial}</div>
+	const div = document.createElement("div");
+	div.className = `ctm-project-item${project.isPersonal ? " ctm-project-personal" : ""}`;
+	div.dataset.shortUrl = project.shortUrl;
+
+	// Get first letter for icon
+	const initial = project.name.charAt(0).toUpperCase();
+
+	div.innerHTML = `
+        <div class="ctm-project-icon">${project.isPersonal ? "👤" : initial}</div>
         <div class="ctm-project-name">${project.name}</div>
     `;
-    
-    div.addEventListener('click', () => {
-        selectProject(project.shortUrl);
-    });
-    
-    return div;
+
+	div.addEventListener("click", () => {
+		selectProject(project.shortUrl);
+	});
+
+	return div;
 }
 
 // Select a project
 function selectProject(shortUrl) {
-    selectedProject = shortUrl;
-    
-    // Update visual state
-    const items = document.querySelectorAll('.ctm-project-item');
-    items.forEach(item => {
-        if (item.dataset.shortUrl === shortUrl) {
-            item.classList.add('selected');
-        } else {
-            item.classList.remove('selected');
-        }
-    });
+	selectedProject = shortUrl;
+
+	// Update visual state
+	const items = document.querySelectorAll(".ctm-project-item");
+	items.forEach((item) => {
+		if (item.dataset.shortUrl === shortUrl) {
+			item.classList.add("selected");
+		} else {
+			item.classList.remove("selected");
+		}
+	});
 }
 
 // Get currently selected project (for startNewExport)
 function getSelectedProject() {
-    return selectedProject;
+	return selectedProject;
 }
 
 // Fallback: Scan projects from DOM (original method)
 function scanProjectsFromDOM() {
-    const projects = [];
-    try {
-        const projectLinks = document.querySelectorAll('nav a[href*="/project"]');
-        projectLinks.forEach(link => {
-            const href = link.getAttribute('href');
-            const match = href.match(/\/g\/([^\/]+)\/project/);
-            if (match) {
-                const shortUrl = match[1];
-                const nameDiv = link.querySelector('.truncate');
-                const name = nameDiv ? nameDiv.textContent.trim() : shortUrl; 
-                // Avoid duplicates
-                if (!projects.find(p => p.shortUrl === shortUrl)) {
-                    projects.push({ shortUrl, name, source: 'dom' });
-                }
-            }
-        });
-    } catch (e) {
-        console.warn("[BulkExport] DOM scan failed", e);
-    }
-    return projects;
+	const projects = [];
+	try {
+		const projectLinks = document.querySelectorAll('nav a[href*="/project"]');
+		projectLinks.forEach((link) => {
+			const href = link.getAttribute("href");
+			const match = href.match(/\/g\/([^/]+)\/project/);
+			if (match) {
+				const shortUrl = match[1];
+				const nameDiv = link.querySelector(".truncate");
+				const name = nameDiv ? nameDiv.textContent.trim() : shortUrl;
+				// Avoid duplicates
+				if (!projects.find((p) => p.shortUrl === shortUrl)) {
+					projects.push({ shortUrl, name, source: "dom" });
+				}
+			}
+		});
+	} catch (e) {
+		console.warn("[BulkExport] DOM scan failed", e);
+	}
+	return projects;
 }
-
 
 // --- Logic: Start ---
 async function startNewExport() {
-    const projectId = getSelectedProject();
-    
-    if (!projectId) {
-        alert('Please select a project first.');
-        return;
-    }
-    
-    // 1. Get Settings
-    const settings = await chrome.storage.sync.get(['filenamePattern', 'frontmatterTemplate', 'defaultTags']);
-    
-    // 2. Prepare State
-    const state = {
-        isRunning: true,
-        projectId: projectId,
-        queue: [],
-        currentIndex: 0,
-        results: {}, // Map<id, {markdown, title, filename}>
-        errors: 0,
-        settings: {
-            filenamePattern: settings.filenamePattern || '{title}_{date}_{time}',
-            frontmatterTemplate: settings.frontmatterTemplate || '',
-            defaultTags: settings.defaultTags || '' // Store default tags here
-        },
-        mode: 'initializing' // initializing -> scanning -> processing -> finished
-    };
+	const projectId = getSelectedProject();
 
-    await chrome.storage.local.set({ automationState: state });
-    
-    // 3. Navigation to Project Source
-    if (projectId === 'personal') {
-        // Stay here and scan immediately.
-        state.mode = 'scanning';
-        await chrome.storage.local.set({ automationState: state });
-        scanAndQueue(state);
-    } else {
-        // Navigate to project page first
-        updateStatusUI("Navigating to project page...");
-        window.location.href = `https://chatgpt.com/g/${projectId}/project`;
-    }
+	if (!projectId) {
+		alert("Please select a project first.");
+		return;
+	}
+
+	// 1. Get Settings
+	const settings = await chrome.storage.sync.get([
+		"filenamePattern",
+		"frontmatterTemplate",
+		"defaultTags",
+	]);
+
+	// 2. Prepare State
+	const state = {
+		isRunning: true,
+		projectId: projectId,
+		queue: [],
+		currentIndex: 0,
+		results: {}, // Map<id, {markdown, title, filename}>
+		errors: 0,
+		settings: {
+			filenamePattern: settings.filenamePattern || "{title}_{date}_{time}",
+			frontmatterTemplate: settings.frontmatterTemplate || "",
+			defaultTags: settings.defaultTags || "", // Store default tags here
+		},
+		mode: "initializing", // initializing -> scanning -> processing -> finished
+	};
+
+	await chrome.storage.local.set({ automationState: state });
+
+	// 3. Navigation to Project Source
+	if (projectId === "personal") {
+		// Stay here and scan immediately.
+		state.mode = "scanning";
+		await chrome.storage.local.set({ automationState: state });
+		scanAndQueue(state);
+	} else {
+		// Navigate to project page first
+		updateStatusUI("Navigating to project page...");
+		window.location.href = `https://chatgpt.com/g/${projectId}/project`;
+	}
 }
 
 // --- Logic: Resume / Auto-Run ---
 // Helper to wait for elements
 async function waitForSelector(selector, timeout = 10000) {
-    const start = Date.now();
-    while (Date.now() - start < timeout) {
-        const el = document.querySelector(selector);
-        if (el) return el;
-        await new Promise(r => setTimeout(r, 500));
-    }
-    return null;
+	const start = Date.now();
+	while (Date.now() - start < timeout) {
+		const el = document.querySelector(selector);
+		if (el) return el;
+		await new Promise((r) => setTimeout(r, 500));
+	}
+	return null;
 }
 
 // Called on page load
 async function checkAndResume() {
-    const data = await chrome.storage.local.get(['automationState']);
-    const state = data.automationState;
-    if (!state || !state.isRunning) return;
+	const data = await chrome.storage.local.get(["automationState"]);
+	const state = data.automationState;
+	if (!state || !state.isRunning) return;
 
-    // We are running! Re-create UI
-    createBulkUI(state); 
+	// We are running! Re-create UI
+	createBulkUI(state);
 
-    // Dispatch based on mode/step
-    if (state.mode === 'initializing') {
-        // We just arrived at project page
-        state.mode = 'scanning';
-        await chrome.storage.local.set({ automationState: state });
-        scanAndQueue(state);
-    } 
-    else if (state.mode === 'scanning') {
-         scanAndQueue(state);
-    }
-    else if (state.mode === 'processing') {
-         updateStatusUI(`Waiting for page content...`);
-         // Wait for actual conversation content to appear
-         await waitForSelector('.prose', 10000);
-         processCurrentItem(state);
-    }
-    else if (state.mode === 'finished') {
-         // UI already shows finished state
-    }
+	// Dispatch based on mode/step
+	if (state.mode === "initializing") {
+		// We just arrived at project page
+		state.mode = "scanning";
+		await chrome.storage.local.set({ automationState: state });
+		scanAndQueue(state);
+	} else if (state.mode === "scanning") {
+		scanAndQueue(state);
+	} else if (state.mode === "processing") {
+		updateStatusUI(`Waiting for page content...`);
+		// Wait for actual conversation content to appear
+		await waitForSelector(".prose", 10000);
+		processCurrentItem(state);
+	} else if (state.mode === "finished") {
+		// UI already shows finished state
+	}
 }
-
 
 // --- Step: Scan ---
 async function scanAndQueue(state) {
-    updateStatusUI("Waiting for page content...");
-    
-    // Determine container
-    const isProject = window.location.href.includes('/project');
-    const selector = isProject ? 'div[data-scroll-root="true"]' : 'nav[aria-label="チャット履歴"]';
-    
-    const container = await waitForSelector(selector, 15000);
-    
-    // Give a little more time for links to render
-    await new Promise(r => setTimeout(r, 1500));
+	updateStatusUI("Waiting for page content...");
 
-    updateStatusUI("Scanning for conversations...");
-    
-    await scrollAndCollectLinks(state);
-    
-    // Reload state in case scroll updated it
-    if (state.queue.length === 0) {
-        alert("No conversations found to export.");
-        state.isRunning = false;
-        await chrome.storage.local.set({ automationState: state });
-        window.location.reload();
-        return;
-    }
-    
-    // Switch to processing
-    state.mode = 'processing';
-    state.currentIndex = 0;
-    await chrome.storage.local.set({ automationState: state });
-    
-    // Start first item
-    processCurrentItem(state);
+	// Determine container
+	const isProject = window.location.href.includes("/project");
+	const selector = isProject
+		? 'div[data-scroll-root="true"]'
+		: 'nav[aria-label="チャット履歴"]';
+
+	const container = await waitForSelector(selector, 15000);
+
+	// Give a little more time for links to render
+	await new Promise((r) => setTimeout(r, 1500));
+
+	updateStatusUI("Scanning for conversations...");
+
+	await scrollAndCollectLinks(state);
+
+	// Reload state in case scroll updated it
+	if (state.queue.length === 0) {
+		alert("No conversations found to export.");
+		state.isRunning = false;
+		await chrome.storage.local.set({ automationState: state });
+		window.location.reload();
+		return;
+	}
+
+	// Helper: proper scroll parent detection
+	function getScrollParent(node) {
+		if (!node) return null;
+		if (node === document.documentElement || node === document.body)
+			return document.documentElement;
+
+		const style = window.getComputedStyle(node);
+		const overflowY = style.getPropertyValue("overflow-y");
+
+		if (overflowY === "auto" || overflowY === "scroll") {
+			return node;
+		}
+
+		return getScrollParent(node.parentNode);
+	}
+
+	// Reuse scroll logic but purely for collecting HREFs
+	async function scrollAndCollectLinks(state) {
+		const collectedIds = new Set();
+		const queue = [];
+
+		// 1. Initial wait for ANY content
+		updateStatusUI("Waiting for content list...");
+		const isProject = window.location.href.includes("/project");
+		const rootScope = isProject
+			? document.querySelector("main") || document
+			: document;
+
+		for (let j = 0; j < 10; j++) {
+			const initialLinks = rootScope.querySelectorAll('a[href*="/c/"]');
+			if (initialLinks.length > 0) break;
+			await new Promise((r) => setTimeout(r, 1000));
+		}
+
+		// 2. Dynamic Container Detection
+		// Find the first link and walk up to find scroll parent
+		let container = null;
+		const firstLink = rootScope.querySelector('a[href*="/c/"]');
+		if (firstLink) {
+			container = getScrollParent(firstLink);
+			if (container && container !== document.documentElement) {
+				updateStatusUI(
+					`Scroll container found: <${container.tagName} class="${container.className}">`,
+				);
+			} else {
+				updateStatusUI("Scroll container: Window/Document");
+				container = null; // Use window scrolling
+			}
+		} else {
+			updateStatusUI("Warning: No links found initially.");
+		}
+
+		// --- Linear Scroll Loop (Element Tracking) ---
+		let retryCount = 0;
+		const MAX_RETRIES = 5;
+		const MAX_SCROLLS = 500;
+		const lastLinkCount = 0;
+
+		updateStatusUI("Starting scroll sequence...");
+
+		for (let i = 0; i < MAX_SCROLLS; i++) {
+			// Re-query links
+			const currentLinks = rootScope.querySelectorAll('a[href*="/c/"]');
+			const currentCount = currentLinks.length;
+
+			// Scroll Strategy: Target the LAST item
+			if (currentLinks.length > 0) {
+				const lastItem = currentLinks[currentLinks.length - 1];
+				lastItem.scrollIntoView({ behavior: "smooth", block: "end" });
+
+				// Also force scroll container if we have one
+				if (container) {
+					// Check if we are at bottom
+					// If not, force it
+					if (
+						container.scrollHeight -
+							container.scrollTop -
+							container.clientHeight >
+						50
+					) {
+						container.scrollTop = container.scrollHeight;
+					}
+				} else {
+					window.scrollTo(0, document.body.scrollHeight);
+				}
+			}
+
+			// Wait
+			await new Promise((r) => setTimeout(r, 1500));
+
+			// Check for progress
+			if (currentCount > lastLinkCount) {
+				retryCount = 0;
+				updateStatusUI(`Scanning... Found ${currentCount} items.`);
+			} else {
+				// No change
+				const hasSpinner =
+					document.querySelector(".animate-spin") ||
+					document.querySelector("svg.text-token-text-tertiary");
+				if (hasSpinner) {
+					updateStatusUI(`Loading... (Spinner visible)`);
+					await new Promise((r) => setTimeout(r, 2000));
+					// Let's just break now if we are strict, or rely on next iteration.
+					// A simple way is to break only if we fail AFTER the shake.
+					// But for simplicity, we treat MAX_RETRIES as the limit.
+					break;
+				}
+			}
+		}
+	}
+
+	// Capture final list
+	const finalScope = isProject
+		? document.querySelector("main") || document
+		: getContainer() || document;
+	const finalLinks = finalScope.querySelectorAll('a[href*="/c/"]');
+
+	updateStatusUI(`Scan complete. Processing ${finalLinks.length} items...`);
+
+	finalLinks.forEach((a) => {
+		const id = a.href.split("/").pop();
+		if (!collectedIds.has(id)) {
+			collectedIds.add(id);
+			queue.push({
+				id: id,
+				href: a.href,
+				title: (a.innerText || a.getAttribute("aria-label") || "Untitled")
+					.trim()
+					.split("\n")[0],
+			});
+		}
+	});
+
+	state.queue = queue;
 }
 
-// Reuse scroll logic but purely for collecting HREFs
-async function scrollAndCollectLinks(state) {
-    // Determine container
-    const isProject = window.location.href.includes('/project');
-    const selector = isProject ? 'div[data-scroll-root="true"]' : 'nav[aria-label="チャット履歴"]';
-    let container = document.querySelector(selector);
-    
-    if (!container && !isProject) {
-         container = document.querySelector('nav div.overflow-y-auto');
-    }
+// --- Step: Process Item ---
+// ... (processCurrentItem stays same, but calls optimized waitForPageLoad)
 
-    if (!container) {
-        // No container found, will fallback to searching the whole document later
-    }
-    
-    const collectedIds = new Set();
-    const queue = [];
+async function waitForPageLoad() {
+	let checks = 0;
+	while (checks < 50) {
+		// 5 seconds max (100ms * 50)
+		const articles = document.querySelectorAll("article");
+		const spinner = document.querySelector(
+			".text-token-text-tertiary > svg.animate-spin",
+		);
 
-    // Wait for at least one link to appear before starting scroll (up to 5s)
-    let checkScope = isProject ? (document.querySelector('main') || document) : (container || document);
-    for (let j=0; j<10; j++) {
-        const initialLinks = checkScope.querySelectorAll('a[href*="/c/"]');
-        if (initialLinks.length > 0) break;
-        await new Promise(r => setTimeout(r, 1000));
-    }
-
-    // Simple scroll loop
-    let previousHeight = 0;
-    let noChangeCount = 0;
-    
-    for (let i=0; i<40; i++) { // Max 40 scrolls (safe limit)
-        if (container) {
-            container.scrollTo(0, container.scrollHeight);
-            await new Promise(r => setTimeout(r, 1000));
-            if (container.scrollHeight === previousHeight) {
-                noChangeCount++;
-                if (noChangeCount >= 3) break;
-            } else {
-                noChangeCount = 0;
-            }
-            previousHeight = container.scrollHeight;
-        } else {
-            break; // No container, just scan once
-        }
-        
-        // Update UI intermittently
-        // Limit scope based on context
-        let currentScope = document;
-        if (isProject) {
-             currentScope = document.querySelector('main') || document;
-        } else {
-             // Personal mode: usually sidebar or container
-             currentScope = container || document;
-        }
-
-        const links = currentScope.querySelectorAll('a[href*="/c/"]');
-        updateStatusUI(`Scanning... Found ${links.length} potential links.`);
-    }
-
-    // Capture final list
-    let finalScope = document;
-    if (isProject) {
-         finalScope = document.querySelector('main') || document;
-    } else {
-         finalScope = container || document;
-    }
-
-    const finalLinks = finalScope.querySelectorAll('a[href*="/c/"]');
-    
-    finalLinks.forEach(a => {
-        const id = a.href.split('/').pop();
-        if (!collectedIds.has(id)) {
-            collectedIds.add(id);
-            queue.push({
-                id: id,
-                href: a.href,
-                title: (a.innerText || a.getAttribute('aria-label') || "Untitled").trim().split('\n')[0]
-            });
-        }
-    });
-
-    // Update state
-    state.queue = queue;
-    // Don't save here, caller will save
+		// Fast exit condition
+		if (articles.length > 0 && !spinner) {
+			// Check if "Regenerate" or input box is ready?
+			// Usually article presence is enough.
+			return;
+		}
+		await new Promise((r) => setTimeout(r, 100)); // Fast poll
+		checks++;
+	}
 }
 
 // --- Step: Process Item ---
 async function processCurrentItem(state) {
-    const { queue, currentIndex } = state;
-    
-    // Check completion
-    if (currentIndex >= queue.length) {
-        state.mode = 'finished';
-        state.isRunning = false; // Stop auto-resume
-        await chrome.storage.local.set({ automationState: state });
-        
-        // Show UI one last time
-        createBulkUI(state);
-        showFinishedState(state);
-        return;
-    }
+	const { queue, currentIndex } = state;
 
-    const item = queue[currentIndex];
-    
-    // Are we on the right page?
-    if (!window.location.href.includes(item.id)) {
-        updateStatusUI(`Navigating to ${currentIndex+1}/${queue.length}: ${item.title}...`);
-        window.location.href = item.href;
-        return; // Will resume after reload
-    }
-    
-    // We are on page. Wait for load.
-    try {
-        updateStatusUI(`Converting ${currentIndex+1}/${queue.length}...`);
-        await waitForPageLoad();
-        
-        // Convert
-        // Converter embeds images as Base64 (Canvas).
-        // To fix performance, we Extract these Base64 images and save them as files.
-        let markdown = converter.convert(document.body);
-        
-        // --- Image Extraction (Base64 -> File) ---
-        // 1. Create images folder (lazy, only if needed)
-        // We can't easily "check" if folder exists in FileSystemAccessAPI without try/catch
-        // We'll assume we write to 'images/' relative filename
-        
-        const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
-        let imgMatch;
-        const processedImages = new Map(); // dataURI -> filename
-        let imgIndex = 1;
+	// Check completion
+	if (currentIndex >= queue.length) {
+		state.mode = "finished";
+		state.isRunning = false; // Stop auto-resume
+		await chrome.storage.local.set({ automationState: state });
 
-        // We need to replace async, so we'll matchAll first
-        const matches = [...markdown.matchAll(imgRegex)];
-        
-        if (matches.length > 0) {
-            updateStatusUI(`Saving ${matches.length} images...`);
-            
-            // Try to create/get images directory handle? 
-            // Actually, we can just save to "images/filename.png" if we are in the root dir handle?
-            // FileSystemDirectoryHandle.getFileHandle('images/foo.png') might not work directly if subfolder doesn't exist.
-            // We usually need to getDirectoryHandle('images', {create: true}) first.
-            
-            // However, processCurrentItem doesn't have reference to the ROOT dirHandle easily 
-            // unless we pass it or store it globally.
-            // Wait, saveAllToDisk handles the actual writing!
-            
-            // CRITICAL: processCurrentItem runs in the content script context gathering data.
-            // saveAllToDisk runs LATER when the user clicks "Save".
-            // We CANNOT write files here in processCurrentItem because we don't have the User Gesture / DirHandle yet!
-            
-            // SOLUTION:
-            // We must keep the Base64 data IN MEMORY (in state.results) until saveAllToDisk is called.
-            // BUT the user complains the file is too big to open. (Presumably referring to the final output?)
-            // OR did they mean "The extension crashes"?
-            // "画像のBaseが大きすぎて開くのにくそほど時間がかかります" -> "Resulting Markdown is slow to open".
-            // So we just need to ensure the FINAL file on disk is clean.
-            // Storing Base64 in `state` (Chrome Storage) MIGHT hit the 5MB/unlimited quota limits or slow down the extension.
-            // But if we can't write to disk yet... we have no choice but to keep it in memory.
-            
-            // wait, `state.results` acts as the buffer.
-            // If we keep Base64 there, `saveAllToDisk` can perform the Extraction.
-            // So content.js `processCurrentItem` is actually fine leaving it as Base64!
-            // The Extraction logic should move to `saveAllToDisk`.
-        }
-        
-        // Metadata for Frontmatter (Defer application to save time)
-        const date = new Date();
+		// Show UI one last time
+		createBulkUI(state);
+		showFinishedState(state);
+		return;
+	}
 
-        const dateStr = date.toISOString().split('T')[0];
-        const timeStr = date.toTimeString().split(' ')[0].replace(/:/g, '');
-        const safeTitle = (item.title || 'Conversation').replace(/[/\\?%*:|"<>]/g, '-').trim();
+	const item = queue[currentIndex];
 
-        // Generate Filename
-        const config = state.settings;
-        const filename = fileSaver.generateFilename(config.filenamePattern, item.title, item.id);
-        
-        // Store Result
-        state.results = state.results || {};
-        state.results[item.id] = {
-            filename: filename,
-            content: markdown,
-            frontmatterData: {
-                title: safeTitle,
-                url: item.href || '',
-                date: dateStr,
-                time: timeStr
-            }
-        };
-        
-    } catch (e) {
-        console.error("Conversion error", e);
-        state.errors = (state.errors || 0) + 1;
-    }
-    
-    // Next
-    state.currentIndex++;
-    await chrome.storage.local.set({ automationState: state });
-    
-    // Trigger navigation to next
-    processCurrentItem(state); 
+	// Are we on the right page?
+	if (!window.location.href.includes(item.id)) {
+		updateStatusUI(
+			`Navigating to ${currentIndex + 1}/${queue.length}: ${item.title}...`,
+		);
+		window.location.href = item.href;
+		return; // Will resume after reload
+	}
+
+	// We are on page. Wait for load.
+	try {
+		updateStatusUI(`Converting ${currentIndex + 1}/${queue.length}...`);
+		await waitForPageLoad();
+
+		// Convert
+		// Converter embeds images as Base64 (Canvas).
+		// To fix performance, we Extract these Base64 images and save them as files.
+		const markdown = converter.convert(document.body);
+
+		// --- Image Extraction (Base64 -> File) ---
+		// 1. Create images folder (lazy, only if needed)
+		// We can't easily "check" if folder exists in FileSystemAccessAPI without try/catch
+		// We'll assume we write to 'images/' relative filename
+
+		const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
+		let imgMatch;
+		const processedImages = new Map(); // dataURI -> filename
+		const imgIndex = 1;
+
+		// We need to replace async, so we'll matchAll first
+		const matches = [...markdown.matchAll(imgRegex)];
+
+		if (matches.length > 0) {
+			updateStatusUI(`Saving ${matches.length} images...`);
+
+			// Try to create/get images directory handle?
+			// Actually, we can just save to "images/filename.png" if we are in the root dir handle?
+			// FileSystemDirectoryHandle.getFileHandle('images/foo.png') might not work directly if subfolder doesn't exist.
+			// We usually need to getDirectoryHandle('images', {create: true}) first.
+
+			// However, processCurrentItem doesn't have reference to the ROOT dirHandle easily
+			// unless we pass it or store it globally.
+			// Wait, saveAllToDisk handles the actual writing!
+
+			// CRITICAL: processCurrentItem runs in the content script context gathering data.
+			// saveAllToDisk runs LATER when the user clicks "Save".
+			// We CANNOT write files here in processCurrentItem because we don't have the User Gesture / DirHandle yet!
+
+			// SOLUTION:
+			// We must keep the Base64 data IN MEMORY (in state.results) until saveAllToDisk is called.
+			// BUT the user complains the file is too big to open. (Presumably referring to the final output?)
+			// OR did they mean "The extension crashes"?
+			// "画像のBaseが大きすぎて開くのにくそほど時間がかかります" -> "Resulting Markdown is slow to open".
+			// So we just need to ensure the FINAL file on disk is clean.
+			// Storing Base64 in `state` (Chrome Storage) MIGHT hit the 5MB/unlimited quota limits or slow down the extension.
+			// But if we can't write to disk yet... we have no choice but to keep it in memory.
+
+			// wait, `state.results` acts as the buffer.
+			// If we keep Base64 there, `saveAllToDisk` can perform the Extraction.
+			// So content.js `processCurrentItem` is actually fine leaving it as Base64!
+			// The Extraction logic should move to `saveAllToDisk`.
+		}
+
+		// Metadata for Frontmatter (Defer application to save time)
+		const date = new Date();
+
+		const dateStr = date.toISOString().split("T")[0];
+		const timeStr = date.toTimeString().split(" ")[0].replace(/:/g, "");
+		const safeTitle = (item.title || "Conversation")
+			.replace(/[/\\?%*:|"<>]/g, "-")
+			.trim();
+
+		// Generate Filename
+		const config = state.settings;
+		const filename = fileSaver.generateFilename(
+			config.filenamePattern,
+			item.title,
+			item.id,
+		);
+
+		// Store Result
+		state.results = state.results || {};
+		state.results[item.id] = {
+			filename: filename,
+			content: markdown,
+			frontmatterData: {
+				title: safeTitle,
+				url: item.href || "",
+				date: dateStr,
+				time: timeStr,
+			},
+		};
+	} catch (e) {
+		console.error("Conversion error", e);
+		state.errors = (state.errors || 0) + 1;
+	}
+
+	// Next
+	state.currentIndex++;
+	await chrome.storage.local.set({ automationState: state });
+
+	// Trigger navigation to next
+	processCurrentItem(state);
 }
 
 // Helper: Fetch image and convert to Base64
 async function fetchImageAsBase64(url) {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const blob = await response.blob();
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    } catch (e) {
-        console.warn("Image fetch failed", e);
-        return null;
-    }
+	try {
+		const response = await fetch(url);
+		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		const blob = await response.blob();
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onloadend = () => resolve(reader.result);
+			reader.onerror = reject;
+			reader.readAsDataURL(blob);
+		});
+	} catch (e) {
+		console.warn("Image fetch failed", e);
+		return null;
+	}
 }
 
 // --- Step: Finalize (Save All) ---
 
 async function saveAllToDisk() {
-    // Reload state to be sure
-    const data = await chrome.storage.local.get(['automationState']);
-    const state = data.automationState;
-    if (!state || !state.results) return;
-    
-    // Get custom tags from UI (Chip UI uses hidden input)
-    // Try global lookup first
-    let hiddenTags = document.getElementById('bulk-tags-hidden-value');
-    let visibleInput = document.getElementById('bulk-tags-input');
+	// Reload state to be sure
+	const data = await chrome.storage.local.get(["automationState"]);
+	const state = data.automationState;
+	if (!state || !state.results) return;
 
-    // Fallback: Try identifying via context (this = button) if global lookup fails
-    if ((!hiddenTags || !visibleInput) && this && this.closest) {
-        const container = this.closest('#chatgpt-to-md-bulk-panel');
-        if (container) {
-            if (!hiddenTags) hiddenTags = container.querySelector('#bulk-tags-hidden-value');
-            if (!visibleInput) visibleInput = container.querySelector('#bulk-tags-input');
-        }
-    }
-    
-    // Check if there is pending text in the input that hasn't been "Entered"
-    let pendingTag = '';
-    if (visibleInput && visibleInput.value.trim()) {
-        pendingTag = visibleInput.value.trim().replace(/^,|,$/g, '');
-    }
+	// Get custom tags from UI (Chip UI uses hidden input)
+	// Try global lookup first
+	let hiddenTags = document.getElementById("bulk-tags-hidden-value");
+	let visibleInput = document.getElementById("bulk-tags-input");
 
-    // Fallback to text input if hidden missing (compatibility) or default tags
-    // If hiddenTags exists, use it. If not, use default.
-    // Also append pendingTag if it exists
-    let rawTags = hiddenTags ? hiddenTags.value : (state.settings.defaultTags || '');
-    if (pendingTag) {
-        rawTags = rawTags ? `${rawTags}, ${pendingTag}` : pendingTag;
-    }
-    
-    console.log("BulkExport: Tags Logic:", {
-        hiddenFound: !!hiddenTags,
-        hiddenValue: hiddenTags ? hiddenTags.value : 'N/A',
-        visibleFound: !!visibleInput,
-        pendingTag: pendingTag,
-        defaultTags: state.settings.defaultTags,
-        finalRaw: rawTags
-    });
-    
-    // Fallback if empty? No, checking specific fallback behavior.
-    // If user explicitly cleared tags, rawTags is "".
-    // If hiddenTags is null (UI not shown?), we fall back to defaults.
-    if (!hiddenTags && !rawTags) {
-        rawTags = state.settings.defaultTags || '';
-    }
+	// Fallback: Try identifying via context (this = button) if global lookup fails
+	if ((!hiddenTags || !visibleInput) && this && this.closest) {
+		const container = this.closest("#chatgpt-to-md-bulk-panel");
+		if (container) {
+			if (!hiddenTags)
+				hiddenTags = container.querySelector("#bulk-tags-hidden-value");
+			if (!visibleInput)
+				visibleInput = container.querySelector("#bulk-tags-input");
+		}
+	}
 
-    const customTags = rawTags;
+	// Check if there is pending text in the input that hasn't been "Entered"
+	let pendingTag = "";
+	if (visibleInput && visibleInput.value.trim()) {
+		pendingTag = visibleInput.value.trim().replace(/^,|,$/g, "");
+	}
 
-    try {
-        const dirHandle = await window.showDirectoryPicker();
-        // const folderName = dirHandle.name || 'Folder'; // Handled in FileSaver
-        
-        updateStatusUI("Writing files...");
-        const results = Object.values(state.results);
-        let saved = 0;
-        
-        for (const file of results) {
-            try {
-                await fileSaver.saveMarkdown(dirHandle, file.filename, file.content, {
-                    frontmatterTemplate: state.settings.frontmatterTemplate,
-                    defaultTags: customTags,
-                    metadata: file.frontmatterData
-                });
-                
-                saved++;
-                if (saved % 5 === 0) updateStatusUI(`Saved ${saved}/${results.length}...`);
-            } catch (e) {
-                console.error(`Write failed for ${file.filename}:`, e.name, e.message);
-                updateStatusUI(`Error: ${e.name} on ${file.filename.substring(0,20)}... Retrying...`);
-                // Retry logic is somewhat complex to port cleanly, but FileSaver has basic fallback.
-                // If we want the specific fallback logic (safeName), we might need to improve FileSaver.
-                // For now, FileSaver has a basic safeName fallback.
-            }
-        }
-        
-// End of saveAllToDisk
-    updateStatusUI(`Done! Saved ${saved} files.`);
-    alert(`Bulk Export Completed!\n\nSaved: ${saved}\n(Reloading extension to reset)`);
-    
-    // Cleanup
-    await chrome.storage.local.set({ automationState: { isRunning: false } });
-    window.location.reload();
-    
-    } catch (e) {
-        alert("Save cancelled or failed: " + e.message + "\n" + e.name);
-    }
+	// Fallback to text input if hidden missing (compatibility) or default tags
+	// If hiddenTags exists, use it. If not, use default.
+	// Also append pendingTag if it exists
+	let rawTags = hiddenTags
+		? hiddenTags.value
+		: state.settings.defaultTags || "";
+	if (pendingTag) {
+		rawTags = rawTags ? `${rawTags}, ${pendingTag}` : pendingTag;
+	}
+
+	console.log("BulkExport: Tags Logic:", {
+		hiddenFound: !!hiddenTags,
+		hiddenValue: hiddenTags ? hiddenTags.value : "N/A",
+		visibleFound: !!visibleInput,
+		pendingTag: pendingTag,
+		defaultTags: state.settings.defaultTags,
+		finalRaw: rawTags,
+	});
+
+	// Fallback if empty? No, checking specific fallback behavior.
+	// If user explicitly cleared tags, rawTags is "".
+	// If hiddenTags is null (UI not shown?), we fall back to defaults.
+	if (!hiddenTags && !rawTags) {
+		rawTags = state.settings.defaultTags || "";
+	}
+
+	const customTags = rawTags;
+
+	try {
+		const dirHandle = await window.showDirectoryPicker();
+		// const folderName = dirHandle.name || 'Folder'; // Handled in FileSaver
+
+		updateStatusUI("Writing files...");
+		const results = Object.values(state.results);
+		let saved = 0;
+
+		for (const file of results) {
+			try {
+				await fileSaver.saveMarkdown(dirHandle, file.filename, file.content, {
+					frontmatterTemplate: state.settings.frontmatterTemplate,
+					defaultTags: customTags,
+					metadata: file.frontmatterData,
+				});
+
+				saved++;
+				if (saved % 5 === 0)
+					updateStatusUI(`Saved ${saved}/${results.length}...`);
+			} catch (e) {
+				console.error(`Write failed for ${file.filename}:`, e.name, e.message);
+				updateStatusUI(
+					`Error: ${e.name} on ${file.filename.substring(0, 20)}... Retrying...`,
+				);
+				// Retry logic is somewhat complex to port cleanly, but FileSaver has basic fallback.
+				// If we want the specific fallback logic (safeName), we might need to improve FileSaver.
+				// For now, FileSaver has a basic safeName fallback.
+			}
+		}
+
+		// End of saveAllToDisk
+		updateStatusUI(`Done! Saved ${saved} files.`);
+		alert(
+			`Bulk Export Completed!\n\nSaved: ${saved}\n(Reloading extension to reset)`,
+		);
+
+		// Cleanup
+		await chrome.storage.local.set({ automationState: { isRunning: false } });
+		window.location.reload();
+	} catch (e) {
+		alert("Save cancelled or failed: " + e.message + "\n" + e.name);
+	}
 }
-
-
-
 
 // Simpler Wait
 async function waitForPageLoad() {
-    let checks = 0;
-    while(checks < 30) {
-        const articles = document.querySelectorAll('article');
-        const spinner = document.querySelector('.text-token-text-tertiary > svg.animate-spin');
-        
-        if (articles.length > 0 && !spinner) {
-            await new Promise(r => setTimeout(r, 1000));
-            return;
-        }
-        await new Promise(r => setTimeout(r, 500));
-        checks++;
-    }
+	let checks = 0;
+	while (checks < 30) {
+		const articles = document.querySelectorAll("article");
+		const spinner = document.querySelector(
+			".text-token-text-tertiary > svg.animate-spin",
+		);
+
+		if (articles.length > 0 && !spinner) {
+			await new Promise((r) => setTimeout(r, 1000));
+			return;
+		}
+		await new Promise((r) => setTimeout(r, 500));
+		checks++;
+	}
 }
 
 function updateStatusUI(text) {
-    const el = document.getElementById('bulk-status-text');
-    if (el) el.textContent = text;
+	const el = document.getElementById("bulk-status-text");
+	if (el) el.textContent = text;
 }
 
 // Startup Listener
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === "get_markdown") {
-        try {
-            const markdown = converter.convert(document.body);
-            const title = document.title.replace('ChatGPT', '').trim() || "Conversation";
-            sendResponse({markdown: markdown, title: title});
-        } catch (e) {
-            sendResponse({error: e.message});
-        }
-    } else if (request.action === "show_bulk_ui") {
-        createBulkUI();
-        sendResponse({status: "ok"});
-    }
-    return true; 
+	if (request.action === "get_markdown") {
+		try {
+			const markdown = converter.convert(document.body);
+			const title =
+				document.title.replace("ChatGPT", "").trim() || "Conversation";
+			sendResponse({ markdown: markdown, title: title });
+		} catch (e) {
+			sendResponse({ error: e.message });
+		}
+	} else if (request.action === "show_bulk_ui") {
+		createBulkUI();
+		sendResponse({ status: "ok" });
+	}
+	return true;
 });
 
 // Check resume on load
 checkAndResume();
 
 console.log("ChatGPT to Markdown extension loaded (V2).");
-
 
 // Helper: Convert Base64 DataURI to Blob (Duplicate removed)

@@ -1,54 +1,38 @@
 {
-  "manifest_version": 3,
-  "name": "ChatGPT to Markdown",
-  "version": "1.0",
-  "description": "Save ChatGPT conversations as Markdown files with customizable paths.",
-  "permissions": [
-    "activeTab",
-    "downloads",
-    "storage",
-    "unlimitedStorage"
-  ],
-  "host_permissions": [
-    "https://chatgpt.com/*",
-    "https://chat.openai.com/*"
-  ],
-  "action": {
-    "default_popup": "popup/popup.html",
-    "default_icon": {
-      "16": "assets/icon16.png",
-      "48": "assets/icon48.png",
-      "128": "assets/icon128.png"
-    }
-  },
-  "icons": {
-    "16": "assets/icon16.png",
-    "48": "assets/icon48.png",
-    "128": "assets/icon128.png"
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://chatgpt.com/*",
-        "https://chat.openai.com/*"
-      ],
-      "js": [
-        "scripts/file_saver.js",
-        "scripts/markdown_converter.js",
-        "scripts/content.js"
-      ],
-      "run_at": "document_start"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "scripts/project_interceptor.js"
-      ],
-      "matches": [
-        "https://chatgpt.com/*",
-        "https://chat.openai.com/*"
-      ]
-    }
-  ]
+	"manifest_version": 3,
+	"name": "ChatGPT to Markdown",
+	"version": "1.0",
+	"description": "Save ChatGPT conversations as Markdown files with customizable paths.",
+	"permissions": ["activeTab", "downloads", "storage", "unlimitedStorage"],
+	"host_permissions": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+	"action": {
+		"default_popup": "popup/popup.html",
+		"default_icon": {
+			"16": "assets/icon16.png",
+			"48": "assets/icon48.png",
+			"128": "assets/icon128.png"
+		}
+	},
+	"icons": {
+		"16": "assets/icon16.png",
+		"48": "assets/icon48.png",
+		"128": "assets/icon128.png"
+	},
+	"content_scripts": [
+		{
+			"matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+			"js": [
+				"scripts/file_saver.js",
+				"scripts/markdown_converter.js",
+				"scripts/content.js"
+			],
+			"run_at": "document_start"
+		}
+	],
+	"web_accessible_resources": [
+		{
+			"resources": ["scripts/project_interceptor.js"],
+			"matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"]
+		}
+	]
 }
