@@ -5,7 +5,6 @@ document.addEventListener("DOMContentLoaded", () => {
 	const openSettingsBtn = document.getElementById("open-settings");
 	const closeSettingsBtn = document.getElementById("close-settings");
 	const exportBtn = document.getElementById("export-settings-btn");
-	const importBtn = document.getElementById("import-settings-btn");
 	const importFileInput = document.getElementById("import-file-input");
 
 	// UI Elements
@@ -19,10 +18,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	const folderNameDisplay = document.getElementById("folder-name");
 	const clearFolderBtn = document.getElementById("clear-folder-btn");
 	const launchBulkBtn = document.getElementById("launch-bulk-btn");
-	// subfolder-name removed
 	const frontmatterInput = document.getElementById("frontmatter-template");
 	const defaultTagsInput = document.getElementById("default-tags"); // Added missing definition
-	const subfolderInput = document.getElementById("subfolder-name");
 
 	// State
 	const DEFAULT_PATTERN = "{title}_{date}_{time}";
@@ -32,19 +29,6 @@ document.addEventListener("DOMContentLoaded", () => {
 	// Default Frontmatter
 	const DEFAULT_FRONTMATTER = "";
 	const DEFAULT_TAGS = ""; // Added missing constant
-	// In popup.html we removed subfolderName? Yes.
-	// But `chrome.storage.sync.get... subfolderName` relies on it?
-	// Line 76: get(['subfolderName'])
-	// Line 83: if (result.subfolderName) { subfolderInput.value = ... }
-	// If subfolderInput is null, line 84 throws error.
-	// I should check if I should remove subfolderName usage.
-	// User requested "No input field". The "subfolder" logic was for the old mechanism.
-	// I should likely remove subfolderInput related code too.
-
-	// State
-	const currentTitle = "";
-	const currentUrl = "";
-
 	// Initialize Preview
 	function initPreview() {
 		chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -236,9 +220,11 @@ document.addEventListener("DOMContentLoaded", () => {
 						frontmatterInput.value = settings.frontmatterTemplate;
 
 					initPreview();
-					setTimeout(() => (statusMsg.textContent = ""), 2000);
+					setTimeout(() => {
+						statusMsg.textContent = "";
+					}, 2000);
 				});
-			} catch (err) {
+			} catch (_err) {
 				statusMsg.textContent = "Invalid JSON file.";
 			}
 		};
@@ -281,7 +267,9 @@ document.addEventListener("DOMContentLoaded", () => {
 						});
 
 						statusMsg.textContent = `Saved to ${dirHandle.name}!`;
-						setTimeout(() => (statusMsg.textContent = ""), 3000);
+						setTimeout(() => {
+							statusMsg.textContent = "";
+						}, 3000);
 						resolve();
 					} catch (e) {
 						console.error("Save Error:", e);
@@ -292,7 +280,7 @@ document.addEventListener("DOMContentLoaded", () => {
 							statusMsg.textContent =
 								"Error: Permission denied. Re-select folder.";
 						} else {
-							statusMsg.textContent = "Write error: " + e.message;
+							statusMsg.textContent = `Write error: ${e.message}`;
 						}
 						reject(e);
 					}
@@ -318,15 +306,14 @@ document.addEventListener("DOMContentLoaded", () => {
 					{ action: "get_markdown" },
 					async (response) => {
 						if (chrome.runtime.lastError) {
-							statusMsg.textContent =
-								"Error: " + chrome.runtime.lastError.message;
-						} else if (response && response.markdown) {
+							statusMsg.textContent = `Error: ${chrome.runtime.lastError.message}`;
+						} else if (response?.markdown) {
 							try {
 								// 1. Get StartIn Handle
-								let startInHandle ;
+								let startInHandle;
 								try {
 									startInHandle = await getDirHandle();
-								} catch (e) {
+								} catch (_e) {
 									// Ignore if no default handle
 								}
 
@@ -392,10 +379,9 @@ document.addEventListener("DOMContentLoaded", () => {
 				chrome.tabs.sendMessage(
 					tabs[0].id,
 					{ action: "show_bulk_ui" },
-					(response) => {
+					(_response) => {
 						if (chrome.runtime.lastError) {
-							statusMsg.textContent =
-								"Error: " + chrome.runtime.lastError.message;
+							statusMsg.textContent = `Error: ${chrome.runtime.lastError.message}`;
 						} else {
 							window.close(); // Close popup so user can use the injected UI
 						}

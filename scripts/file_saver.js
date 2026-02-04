@@ -1,8 +1,4 @@
 class FileSaver {
-	constructor() {
-		// No dependencies
-	}
-
 	/**
 	 * Generate a filename based on the pattern and metadata.
 	 * @param {string} pattern - Filename pattern (e.g. "{title}_{date}")
@@ -107,8 +103,7 @@ class FileSaver {
 			const writable = await fileHandle.createWritable({
 				keepExistingData: true,
 			});
-			const backupContent =
-				`<!-- Original Filename: ${filename} -->\n` + content;
+			const backupContent = `<!-- Original Filename: ${filename} -->\n${content}`;
 			const blob = new Blob([backupContent], { type: "text/markdown" });
 			await writable.write({ type: "write", position: 0, data: blob });
 			await writable.truncate(blob.size);
@@ -188,7 +183,7 @@ class FileSaver {
 			.split(",")
 			.map((t) => t.trim())
 			.filter(Boolean);
-		const tagArrayString = "[" + tagList.join(", ") + "]";
+		const tagArrayString = `[${tagList.join(", ")}]`;
 
 		// Smart Override: If template lacks {tags} but we have tags, force update the template
 		// Only if there are actual tags to add
@@ -211,7 +206,7 @@ class FileSaver {
 						"tags: {tags}\n" +
 						activeTemplate.substring(lastDash);
 				} else {
-					activeTemplate = activeTemplate + "\ntags: {tags}";
+					activeTemplate = `${activeTemplate}\ntags: {tags}`;
 				}
 			}
 		}
@@ -238,3 +233,5 @@ class FileSaver {
 		return new Blob([ab], { type: mimeString });
 	}
 }
+
+globalThis.FileSaver = FileSaver;

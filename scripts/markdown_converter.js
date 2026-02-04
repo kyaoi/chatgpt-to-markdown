@@ -28,7 +28,7 @@ class MarkdownConverter {
 
 			if (contentNode) {
 				const textContent = this.domToMarkdown(contentNode);
-				markdown += textContent.trim() + "\n\n---\n\n";
+				markdown += `${textContent.trim()}\n\n---\n\n`;
 			}
 		});
 
@@ -89,10 +89,10 @@ class MarkdownConverter {
 							c.startsWith("language-"),
 						);
 						const lang = langClass ? langClass.replace("language-", "") : "";
-						text += "\n```" + lang + "\n" + codeBlock.textContent + "\n```\n\n";
+						text += `\n\`\`\`${lang}\n${codeBlock.textContent}\n\`\`\`\n\n`;
 					} else {
 						// Fallback
-						text += "\n```\n" + child.textContent + "\n```\n\n";
+						text += `\n\`\`\`\n${child.textContent}\n\`\`\`\n\n`;
 					}
 					return;
 				}
@@ -145,7 +145,7 @@ class MarkdownConverter {
 					}
 					case "p": {
 						const content = this.domToMarkdown(child).trim();
-						if (content) text += content + "\n\n";
+						if (content) text += `${content}\n\n`;
 						break;
 					}
 					case "h1":
@@ -175,7 +175,7 @@ class MarkdownConverter {
 							: "";
 						if (parentTag === "pre") break; // handled in <pre>
 						const codeText = child.textContent;
-						if (codeText) text += "`" + codeText.replace(/`/g, "\\`") + "`";
+						if (codeText) text += `\`${codeText.replace(/`/g, "\\`")}\``;
 						break;
 					}
 					case "em":
@@ -202,9 +202,7 @@ class MarkdownConverter {
 						let base64 = this.imageToBase64(child);
 						console.log(
 							"Canvas conversion result:",
-							base64
-								? "Success (Length: " + base64.length + ")"
-								: "Failed/Null",
+							base64 ? `Success (Length: ${base64.length})` : "Failed/Null",
 						);
 
 						if (!base64 && src) {
@@ -217,7 +215,7 @@ class MarkdownConverter {
 					case "table":
 						// ...
 						this.lastImageSrc = null; // Reset on structural change
-						text += this.processTable(child) + "\n\n";
+						text += `${this.processTable(child)}\n\n`;
 						break;
 					case "br":
 						text += "\n";
@@ -231,7 +229,7 @@ class MarkdownConverter {
 						// Ideally we reset in convert() loop.
 
 						// Check for KaTeX math
-						if (child.classList && child.classList.contains("katex")) {
+						if (child.classList?.contains("katex")) {
 							const annotation = child.querySelector(
 								'annotation[encoding="application/x-tex"]',
 							);
@@ -245,8 +243,7 @@ class MarkdownConverter {
 									child.classList.contains("katex-display") ||
 									(child.tagName.toLowerCase() === "div" &&
 										child.classList.contains("math-display")) ||
-									(child.parentElement &&
-										child.parentElement.classList.contains("katex-display"));
+									child.parentElement?.classList.contains("katex-display");
 
 								const latex = annotation.textContent;
 								text += isBlock
@@ -260,7 +257,8 @@ class MarkdownConverter {
 					case "button":
 						// Ignore buttons (citation sources, etc.)
 						break;
-					case "math": { // fallback if we hit a raw math tag not wrapped in known katex structure
+					case "math": {
+						// fallback if we hit a raw math tag not wrapped in known katex structure
 						const annotation = child.querySelector(
 							'annotation[encoding="application/x-tex"]',
 						);
@@ -318,7 +316,7 @@ class MarkdownConverter {
 				index++;
 			}
 		});
-		return text + "\n";
+		return `${text}\n`;
 	}
 
 	processTable(tableNode) {
@@ -337,7 +335,7 @@ class MarkdownConverter {
 			separatorLine += " --- |";
 		});
 
-		text += headerLine + "\n" + separatorLine + "\n";
+		text += `${headerLine}\n${separatorLine}\n`;
 
 		// Data rows
 		for (let i = 1; i < rows.length; i++) {
@@ -346,7 +344,7 @@ class MarkdownConverter {
 			cells.forEach((c) => {
 				rowLine += ` ${c.textContent.trim()} |`;
 			});
-			text += rowLine + "\n";
+			text += `${rowLine}\n`;
 		}
 
 		return text;
@@ -377,13 +375,14 @@ class MarkdownConverter {
 		let result = "";
 		let lastIndex = 0;
 		const fenceRegex = /```[\s\S]*?```/g;
-		let match;
+		let match = fenceRegex.exec(text);
 
-		while ((match = fenceRegex.exec(text)) !== null) {
+		while (match !== null) {
 			const before = text.slice(lastIndex, match.index);
 			result += this.applyToNonInlineCode(before, fn);
 			result += match[0]; // keep code fences as-is
 			lastIndex = match.index + match[0].length;
+			match = fenceRegex.exec(text);
 		}
 
 		result += this.applyToNonInlineCode(text.slice(lastIndex), fn);
@@ -394,13 +393,14 @@ class MarkdownConverter {
 		let result = "";
 		let lastIndex = 0;
 		const inlineRegex = /`[^`]*`/g;
-		let match;
+		let match = inlineRegex.exec(text);
 
-		while ((match = inlineRegex.exec(text)) !== null) {
+		while (match !== null) {
 			const before = text.slice(lastIndex, match.index);
 			result += fn(before);
 			result += match[0]; // keep inline code as-is
 			lastIndex = match.index + match[0].length;
+			match = inlineRegex.exec(text);
 		}
 
 		result += fn(text.slice(lastIndex));
@@ -413,7 +413,6 @@ class MarkdownConverter {
 
 		while (i < text.length) {
 			if (text[i] === "*" && text[i + 1] === "*") {
-				const start = i;
 				const end = text.indexOf("**", i + 2);
 				if (end === -1) {
 					result += text.slice(i);
@@ -448,3 +447,5 @@ class MarkdownConverter {
 		return result;
 	}
 }
+
+globalThis.MarkdownConverter = MarkdownConverter;

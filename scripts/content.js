@@ -524,7 +524,9 @@ function showFinishedState(state) {
 		function renderTags() {
 			// clear wrapper except input
 			const chips = wrapper.querySelectorAll(".ctm-tag-chip");
-			chips.forEach((c) => c.remove());
+			chips.forEach((c) => {
+				c.remove();
+			});
 
 			tags.forEach((tag, idx) => {
 				const chip = document.createElement("div");
@@ -604,7 +606,9 @@ const projectInterceptor = {
 	notify() {
 		const projects = this.getProjects();
 		const stats = this.getStats();
-		this.listeners.forEach((fn) => fn(projects, stats));
+		this.listeners.forEach((fn) => {
+			fn(projects, stats);
+		});
 	},
 
 	getProjects() {
@@ -623,7 +627,9 @@ const projectInterceptor = {
 	},
 
 	addProjects(projects) {
-		projects.forEach((p) => this.cache.set(p.shortUrl, p));
+		projects.forEach((p) => {
+			this.cache.set(p.shortUrl, p);
+		});
 		this.lastUpdated = Date.now();
 		this.saveCache();
 		this.notify();
@@ -642,12 +648,12 @@ const projectInterceptor = {
 		try {
 			const data = await chrome.storage.local.get(["projectCache"]);
 			if (data.projectCache?.projects) {
-				data.projectCache.projects.forEach((p) =>
-					this.cache.set(p.shortUrl, p),
-				);
+				data.projectCache.projects.forEach((p) => {
+					this.cache.set(p.shortUrl, p);
+				});
 				this.lastUpdated = data.projectCache.lastUpdated;
 			}
-		} catch (e) {}
+		} catch (_e) {}
 	},
 
 	async clearCache() {
@@ -673,7 +679,7 @@ try {
 		this.remove();
 	};
 	(document.head || document.documentElement).appendChild(script);
-} catch (e) {}
+} catch (_e) {}
 
 // Init cache
 projectInterceptor.loadCache();
@@ -925,14 +931,17 @@ async function scanAndQueue(state) {
 		? 'div[data-scroll-root="true"]'
 		: 'nav[aria-label="チャット履歴"]';
 
-	const container = await waitForSelector(selector, 15000);
+	await waitForSelector(selector, 15000);
 
 	// Give a little more time for links to render
 	await new Promise((r) => setTimeout(r, 1500));
 
 	updateStatusUI("Scanning for conversations...");
 
-	await scrollAndCollectLinks(state);
+	const collectedIds = new Set();
+	const queue = [];
+
+	await scrollAndCollectLinks();
 
 	// Reload state in case scroll updated it
 	if (state.queue.length === 0) {
@@ -960,10 +969,7 @@ async function scanAndQueue(state) {
 	}
 
 	// Reuse scroll logic but purely for collecting HREFs
-	async function scrollAndCollectLinks(state) {
-		const collectedIds = new Set();
-		const queue = [];
-
+	async function scrollAndCollectLinks() {
 		// 1. Initial wait for ANY content
 		updateStatusUI("Waiting for content list...");
 		const isProject = window.location.href.includes("/project");
@@ -996,8 +1002,6 @@ async function scanAndQueue(state) {
 		}
 
 		// --- Linear Scroll Loop (Element Tracking) ---
-		let retryCount = 0;
-		const MAX_RETRIES = 5;
 		const MAX_SCROLLS = 500;
 		const lastLinkCount = 0;
 
@@ -1035,7 +1039,6 @@ async function scanAndQueue(state) {
 
 			// Check for progress
 			if (currentCount > lastLinkCount) {
-				retryCount = 0;
 				updateStatusUI(`Scanning... Found ${currentCount} items.`);
 			} else {
 				// No change
@@ -1082,26 +1085,6 @@ async function scanAndQueue(state) {
 // --- Step: Process Item ---
 // ... (processCurrentItem stays same, but calls optimized waitForPageLoad)
 
-async function waitForPageLoad() {
-	let checks = 0;
-	while (checks < 50) {
-		// 5 seconds max (100ms * 50)
-		const articles = document.querySelectorAll("article");
-		const spinner = document.querySelector(
-			".text-token-text-tertiary > svg.animate-spin",
-		);
-
-		// Fast exit condition
-		if (articles.length > 0 && !spinner) {
-			// Check if "Regenerate" or input box is ready?
-			// Usually article presence is enough.
-			return;
-		}
-		await new Promise((r) => setTimeout(r, 100)); // Fast poll
-		checks++;
-	}
-}
-
 // --- Step: Process Item ---
 async function processCurrentItem(state) {
 	const { queue, currentIndex } = state;
@@ -1145,10 +1128,6 @@ async function processCurrentItem(state) {
 		// We'll assume we write to 'images/' relative filename
 
 		const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
-		let imgMatch;
-		const processedImages = new Map(); // dataURI -> filename
-		const imgIndex = 1;
-
 		// We need to replace async, so we'll matchAll first
 		const matches = [...markdown.matchAll(imgRegex)];
 
@@ -1226,7 +1205,7 @@ async function processCurrentItem(state) {
 }
 
 // Helper: Fetch image and convert to Base64
-async function fetchImageAsBase64(url) {
+async function _fetchImageAsBase64(url) {
 	try {
 		const response = await fetch(url);
 		if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1269,7 +1248,7 @@ async function saveAllToDisk() {
 
 	// Check if there is pending text in the input that hasn't been "Entered"
 	let pendingTag = "";
-	if (visibleInput && visibleInput.value.trim()) {
+	if (visibleInput?.value.trim()) {
 		pendingTag = visibleInput.value.trim().replace(/^,|,$/g, "");
 	}
 
@@ -1341,7 +1320,7 @@ async function saveAllToDisk() {
 		await chrome.storage.local.set({ automationState: { isRunning: false } });
 		window.location.reload();
 	} catch (e) {
-		alert("Save cancelled or failed: " + e.message + "\n" + e.name);
+		alert(`Save cancelled or failed: ${e.message}\n${e.name}`);
 	}
 }
 
@@ -1369,7 +1348,7 @@ function updateStatusUI(text) {
 }
 
 // Startup Listener
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 	if (request.action === "get_markdown") {
 		try {
 			const markdown = converter.convert(document.body);

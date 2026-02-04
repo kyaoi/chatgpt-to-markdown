@@ -27,7 +27,7 @@
 				const clonedResponse = response.clone();
 				handleMultiProjectResponse(clonedResponse);
 			}
-		} catch (e) {
+		} catch (_e) {
 			// Silently fail
 		}
 
@@ -50,7 +50,7 @@
 					],
 				});
 			}
-		} catch (e) {
+		} catch (_e) {
 			/* ignore */
 		}
 	}
@@ -81,7 +81,7 @@
 					});
 				}
 			}
-		} catch (e) {
+		} catch (_e) {
 			// Silent
 		}
 	}
