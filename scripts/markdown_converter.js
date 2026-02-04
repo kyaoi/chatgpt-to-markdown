@@ -28,6 +28,9 @@ class MarkdownConverter {
             }
         });
 
+        // Normalize bold spacing even if bold markers come from plain text
+        markdown = this.normalizeBoldSpacing(markdown);
+
         // Final cleanup: Remove excessive newlines (3 or more becomes 2)
         return markdown.replace(/\n{3,}/g, '\n\n').trim();
     }
@@ -97,6 +100,62 @@ class MarkdownConverter {
 
                 switch (tagName) {
                     // ... (skip cases) ...
+                    case 'hr':
+                        text += "\n---\n\n";
+                        break;
+                    case 'ul':
+                        text += this.processList(child, false);
+                        break;
+                    case 'ol':
+                        text += this.processList(child, true);
+                        break;
+                    case 'li': {
+                        // Fallback for stray <li> outside of <ul>/<ol>
+                        const content = this.domToMarkdown(child).trim();
+                        if (content) text += `- ${content}\n`;
+                        break;
+                    }
+                    case 'p': {
+                        const content = this.domToMarkdown(child).trim();
+                        if (content) text += content + "\n\n";
+                        break;
+                    }
+                    case 'h1':
+                    case 'h2':
+                    case 'h3':
+                    case 'h4':
+                    case 'h5':
+                    case 'h6': {
+                        const level = Number(tagName.slice(1));
+                        const content = this.domToMarkdown(child).trim();
+                        if (content) text += `${'#'.repeat(level)} ${content}\n\n`;
+                        break;
+                    }
+                    case 'a': {
+                        const href = child.getAttribute('href') || '';
+                        const label = this.domToMarkdown(child).trim() || href;
+                        if (href) {
+                            text += `[${label}](${href})`;
+                        } else {
+                            text += label;
+                        }
+                        break;
+                    }
+                    case 'code': {
+                        const parentTag = child.parentElement ? child.parentElement.tagName.toLowerCase() : '';
+                        if (parentTag === 'pre') break; // handled in <pre>
+                        const codeText = child.textContent;
+                        if (codeText) text += "`" + codeText.replace(/`/g, "\\`") + "`";
+                        break;
+                    }
+                    case 'em':
+                    case 'i':
+                        text += `*${this.domToMarkdown(child)}*`;
+                        break;
+                    case 'del':
+                    case 's':
+                        text += `~~${this.domToMarkdown(child)}~~`;
+                        break;
                     case 'img':
                         const alt = child.getAttribute('alt') || '';
                         const src = child.getAttribute('src') || '';
@@ -169,8 +228,7 @@ class MarkdownConverter {
                          break;
                     case 'strong':
                     case 'b':
-                        // Add spaces around ** markers as requested to prevent formatting bleed
-                        text += ` **${this.domToMarkdown(child)}** `;
+                        text += `**${this.domToMarkdown(child)}**`;
                         break;
                     case 'blockquote':
                         const quoteContent = this.domToMarkdown(child).trim();
@@ -195,7 +253,11 @@ class MarkdownConverter {
                 const marker = isOrdered ? `${index}. ` : "- ";
                 // Indent child lines for nested lists (basic approach)
                 let content = this.domToMarkdown(child).trim();
-                // If content has newlines, indent them? Complex for nested, but simple list for now.
+                // Normalize excessive blank lines inside list items
+                content = content.replace(/\n{2,}/g, '\n');
+                if (content.includes('\n')) {
+                    content = content.replace(/\n/g, '\n  ');
+                }
                 text += `${marker}${content}\n`;
                 index++;
             }
@@ -250,5 +312,83 @@ class MarkdownConverter {
             return null;
         }
     }
-}
 
+    normalizeBoldSpacing(text) {
+        return this.applyToNonCode(text, segment => this.fixBoldSpacing(segment));
+    }
+
+    applyToNonCode(text, fn) {
+        let result = "";
+        let lastIndex = 0;
+        const fenceRegex = /```[\s\S]*?```/g;
+        let match;
+
+        while ((match = fenceRegex.exec(text)) !== null) {
+            const before = text.slice(lastIndex, match.index);
+            result += this.applyToNonInlineCode(before, fn);
+            result += match[0]; // keep code fences as-is
+            lastIndex = match.index + match[0].length;
+        }
+
+        result += this.applyToNonInlineCode(text.slice(lastIndex), fn);
+        return result;
+    }
+
+    applyToNonInlineCode(text, fn) {
+        let result = "";
+        let lastIndex = 0;
+        const inlineRegex = /`[^`]*`/g;
+        let match;
+
+        while ((match = inlineRegex.exec(text)) !== null) {
+            const before = text.slice(lastIndex, match.index);
+            result += fn(before);
+            result += match[0]; // keep inline code as-is
+            lastIndex = match.index + match[0].length;
+        }
+
+        result += fn(text.slice(lastIndex));
+        return result;
+    }
+
+    fixBoldSpacing(text) {
+        let result = "";
+        let i = 0;
+
+        while (i < text.length) {
+            if (text[i] === '*' && text[i + 1] === '*') {
+                const start = i;
+                const end = text.indexOf('**', i + 2);
+                if (end === -1) {
+                    result += text.slice(i);
+                    break;
+                }
+
+                const content = text.slice(i + 2, end);
+                const prevChar = result.slice(-1);
+                const nextChar = text[end + 2] || "";
+
+                const prevNeedsSpace = prevChar && /[\p{L}\p{N}]/u.test(prevChar);
+                const nextNeedsSpace = nextChar && /[\p{L}\p{N}]/u.test(nextChar);
+
+                if (prevNeedsSpace && prevChar !== ' ') {
+                    result += " ";
+                }
+
+                result += `**${content}**`;
+
+                if (nextNeedsSpace) {
+                    result += " ";
+                }
+
+                i = end + 2;
+                continue;
+            }
+
+            result += text[i];
+            i++;
+        }
+
+        return result;
+    }
+}
