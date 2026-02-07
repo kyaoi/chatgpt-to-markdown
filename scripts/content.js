@@ -923,36 +923,14 @@ async function checkAndResume() {
 
 // --- Step: Scan ---
 async function scanAndQueue(state) {
-	updateStatusUI("Waiting for page content...");
-
-	// Determine container
 	const isProject = window.location.href.includes("/project");
-	const selector = isProject
-		? 'div[data-scroll-root="true"]'
-		: 'nav[aria-label="チャット履歴"]';
-
-	await waitForSelector(selector, 15000);
-
-	// Give a little more time for links to render
-	await new Promise((r) => setTimeout(r, 1500));
-
-	updateStatusUI("Scanning for conversations...");
-
 	const collectedIds = new Set();
 	const queue = [];
 
-	await scrollAndCollectLinks();
-
-	// Reload state in case scroll updated it
-	if (state.queue.length === 0) {
-		alert("No conversations found to export.");
-		state.isRunning = false;
-		await chrome.storage.local.set({ automationState: state });
-		window.location.reload();
-		return;
+	function sleep(ms) {
+		return new Promise((r) => setTimeout(r, ms));
 	}
 
-	// Helper: proper scroll parent detection
 	function getScrollParent(node) {
 		if (!node) return null;
 		if (node === document.documentElement || node === document.body)
@@ -968,59 +946,211 @@ async function scanAndQueue(state) {
 		return getScrollParent(node.parentNode);
 	}
 
-	// Reuse scroll logic but purely for collecting HREFs
-	async function scrollAndCollectLinks() {
-		// 1. Initial wait for ANY content
-		updateStatusUI("Waiting for content list...");
-		const isProject = window.location.href.includes("/project");
-		const rootScope = isProject
-			? document.querySelector("main") || document
-			: document;
+	function resolveScrollContainer(node) {
+		const parent = getScrollParent(node);
+		if (parent && parent !== document.documentElement) return parent;
+		return document.scrollingElement || document.documentElement;
+	}
 
-		for (let j = 0; j < 10; j++) {
-			const initialLinks = rootScope.querySelectorAll('a[href*="/c/"]');
-			if (initialLinks.length > 0) break;
-			await new Promise((r) => setTimeout(r, 1000));
+	function enqueueLink(anchor) {
+		const href = anchor.href || anchor.getAttribute("href") || "";
+		if (!href) return;
+		const idPart = href.includes("/c/") ? href.split("/c/")[1] : href;
+		const id = (idPart || "").split("?")[0];
+		if (!id || collectedIds.has(id)) return;
+		collectedIds.add(id);
+		queue.push({
+			id: id,
+			href: href,
+			title: (anchor.innerText || anchor.getAttribute("aria-label") || "Untitled")
+				.trim()
+				.split("\n")[0],
+		});
+	}
+
+	function getProjectList() {
+		const list = document.querySelector(
+			"ol.divide-token-bg-tertiary.group.divide-y",
+		);
+		if (list) return list;
+		const item = document.querySelector("li.group\\/project-item");
+		return item?.closest("ol") || null;
+	}
+
+	async function waitForProjectList(timeoutMs = 5000) {
+		const start = Date.now();
+		while (Date.now() - start < timeoutMs) {
+			const list = getProjectList();
+			if (list) return list;
+			await sleep(250);
+		}
+		return null;
+	}
+
+	async function scrollProjectList(listEl) {
+		const scrollContainer = resolveScrollContainer(listEl);
+		const linkSelector = "li.group\\/project-item a[href*=\"/c/\"]";
+
+		const MAX_SCROLLS = 240;
+		const MAX_IDLE = 5;
+		const MAX_NO_GROW = 4;
+		const WAIT_IDLE = 350;
+		const WAIT_BUSY = 800;
+		let lastCount = 0;
+		let idleCount = 0;
+		let noGrowCount = 0;
+		let lastScrollHeight = -1;
+
+		function getMetrics() {
+			const root = scrollContainer || document.documentElement;
+			return {
+				scrollTop: root.scrollTop,
+				scrollHeight: root.scrollHeight,
+				clientHeight: root.clientHeight,
+			};
 		}
 
-		// 2. Dynamic Container Detection
-		// Find the first link and walk up to find scroll parent
-		let container = null;
-		const firstLink = rootScope.querySelector('a[href*="/c/"]');
-		if (firstLink) {
-			container = getScrollParent(firstLink);
-			if (container && container !== document.documentElement) {
-				updateStatusUI(
-					`Scroll container found: <${container.tagName} class="${container.className}">`,
-				);
+		updateStatusUI("Scanning project conversations...");
+
+		for (let i = 0; i < MAX_SCROLLS; i++) {
+			const links = listEl.querySelectorAll(linkSelector);
+			const count = links.length;
+			const isBusy = listEl.getAttribute("aria-busy") === "true";
+			const metrics = getMetrics();
+			const canScroll = metrics.scrollHeight - metrics.clientHeight > 1;
+			const isAtBottom =
+				metrics.scrollTop + metrics.clientHeight >= metrics.scrollHeight - 2;
+
+			if (count > lastCount) {
+				lastCount = count;
+				idleCount = 0;
+				noGrowCount = 0;
+				updateStatusUI(`Scanning... Found ${count} items.`);
 			} else {
-				updateStatusUI("Scroll container: Window/Document");
-				container = null; // Use window scrolling
+				idleCount++;
 			}
-		} else {
-			updateStatusUI("Warning: No links found initially.");
-		}
 
-		// --- Linear Scroll Loop (Element Tracking) ---
-		const MAX_SCROLLS = 500;
-		const lastLinkCount = 0;
+			if (metrics.scrollHeight === lastScrollHeight) {
+				noGrowCount++;
+			} else {
+				noGrowCount = 0;
+			}
+
+			if (!canScroll && !isBusy) {
+				updateStatusUI(`Scanning complete. Found ${count} items.`);
+				break;
+			}
+
+			if (!isBusy && isAtBottom && idleCount >= MAX_IDLE) {
+				if (noGrowCount >= MAX_NO_GROW) {
+					updateStatusUI(`Scanning complete. Found ${count} items.`);
+					break;
+				}
+			}
+
+			if (links.length > 0) {
+				const lastItem = links[links.length - 1];
+				lastItem.scrollIntoView({ behavior: "auto", block: "end" });
+			}
+			scrollContainer.scrollTop = scrollContainer.scrollHeight;
+			lastScrollHeight = metrics.scrollHeight;
+
+			await sleep(isBusy ? WAIT_BUSY : WAIT_IDLE);
+		}
+	}
+
+	async function scanProjectPage() {
+		updateStatusUI("Waiting for project list...");
+		const listEl = await waitForProjectList();
+		if (!listEl) return false;
+
+		await scrollProjectList(listEl);
+
+		const links = listEl.querySelectorAll(
+			"li.group\\/project-item a[href*=\"/c/\"]",
+		);
+		updateStatusUI(`Scan complete. Processing ${links.length} items...`);
+		links.forEach((a) => {
+			enqueueLink(a);
+		});
+		return true;
+	}
+
+	async function scanDefaultPage() {
+		updateStatusUI("Waiting for page content...");
+		await waitForSelector('nav[aria-label="チャット履歴"]', 10000);
+
+		const initialLinks = document.querySelectorAll('a[href*="/c/"]');
+		await sleep(initialLinks.length > 0 ? 200 : 1200);
+
+		updateStatusUI("Scanning for conversations...");
+
+		const rootScope = document;
+		const firstLink = rootScope.querySelector('a[href*="/c/"]');
+		const container = firstLink ? getScrollParent(firstLink) : null;
+
+		const MAX_SCROLLS = 300;
+		const MAX_IDLE = 4;
+		const MAX_IDLE_WITH_SPINNER = 8;
+		const WAIT_SHORT = 700;
+		const WAIT_LONG = 1500;
+		let lastLinkCount = 0;
+		let idleCount = 0;
+		let lastScrollHeight = -1;
+
+		function getScrollMetrics() {
+			const scrollRoot = container || document.documentElement;
+			return {
+				scrollTop: scrollRoot.scrollTop,
+				scrollHeight: scrollRoot.scrollHeight,
+				clientHeight: scrollRoot.clientHeight,
+			};
+		}
 
 		updateStatusUI("Starting scroll sequence...");
 
 		for (let i = 0; i < MAX_SCROLLS; i++) {
-			// Re-query links
 			const currentLinks = rootScope.querySelectorAll('a[href*="/c/"]');
 			const currentCount = currentLinks.length;
 
-			// Scroll Strategy: Target the LAST item
+			if (currentCount > lastLinkCount) {
+				lastLinkCount = currentCount;
+				idleCount = 0;
+				updateStatusUI(`Scanning... Found ${currentCount} items.`);
+			} else {
+				idleCount++;
+			}
+
+			const hasSpinner =
+				document.querySelector(".animate-spin") ||
+				document.querySelector("svg.text-token-text-tertiary");
+			const metrics = getScrollMetrics();
+			const canScroll = metrics.scrollHeight - metrics.clientHeight > 1;
+			const isAtBottom =
+				metrics.scrollTop + metrics.clientHeight >= metrics.scrollHeight - 2;
+			const idleLimit = hasSpinner ? MAX_IDLE_WITH_SPINNER : MAX_IDLE;
+
+			if (!canScroll && !hasSpinner) {
+				updateStatusUI(`Scanning complete. Found ${currentCount} items.`);
+				break;
+			}
+
+			if (
+				isAtBottom &&
+				idleCount >= idleLimit &&
+				(!hasSpinner || metrics.scrollHeight === lastScrollHeight)
+			) {
+				updateStatusUI(`Scanning complete. Found ${currentCount} items.`);
+				break;
+			}
+
+			lastScrollHeight = metrics.scrollHeight;
+
 			if (currentLinks.length > 0) {
 				const lastItem = currentLinks[currentLinks.length - 1];
 				lastItem.scrollIntoView({ behavior: "smooth", block: "end" });
 
-				// Also force scroll container if we have one
 				if (container) {
-					// Check if we are at bottom
-					// If not, force it
 					if (
 						container.scrollHeight -
 							container.scrollTop -
@@ -1034,52 +1164,44 @@ async function scanAndQueue(state) {
 				}
 			}
 
-			// Wait
-			await new Promise((r) => setTimeout(r, 1500));
-
-			// Check for progress
-			if (currentCount > lastLinkCount) {
-				updateStatusUI(`Scanning... Found ${currentCount} items.`);
-			} else {
-				// No change
-				const hasSpinner =
-					document.querySelector(".animate-spin") ||
-					document.querySelector("svg.text-token-text-tertiary");
-				if (hasSpinner) {
-					updateStatusUI(`Loading... (Spinner visible)`);
-					await new Promise((r) => setTimeout(r, 2000));
-					// Let's just break now if we are strict, or rely on next iteration.
-					// A simple way is to break only if we fail AFTER the shake.
-					// But for simplicity, we treat MAX_RETRIES as the limit.
-					break;
-				}
+			if (hasSpinner) {
+				updateStatusUI("Loading... (Spinner visible)");
 			}
+			await sleep(hasSpinner ? WAIT_LONG : WAIT_SHORT);
 		}
+
+		const finalLinks = rootScope.querySelectorAll('a[href*="/c/"]');
+		updateStatusUI(`Scan complete. Processing ${finalLinks.length} items...`);
+		finalLinks.forEach((a) => {
+			enqueueLink(a);
+		});
 	}
 
-	// Capture final list
-	const finalScope = isProject
-		? document.querySelector("main") || document
-		: getContainer() || document;
-	const finalLinks = finalScope.querySelectorAll('a[href*="/c/"]');
-
-	updateStatusUI(`Scan complete. Processing ${finalLinks.length} items...`);
-
-	finalLinks.forEach((a) => {
-		const id = a.href.split("/").pop();
-		if (!collectedIds.has(id)) {
-			collectedIds.add(id);
-			queue.push({
-				id: id,
-				href: a.href,
-				title: (a.innerText || a.getAttribute("aria-label") || "Untitled")
-					.trim()
-					.split("\n")[0],
-			});
+	if (isProject) {
+		const ok = await scanProjectPage();
+		if (!ok) {
+			updateStatusUI("Project list not found. Falling back...");
+			await scanDefaultPage();
 		}
-	});
+	} else {
+		await scanDefaultPage();
+	}
 
 	state.queue = queue;
+	state.currentIndex = 0;
+
+	if (state.queue.length === 0) {
+		alert("No conversations found to export.");
+		state.isRunning = false;
+		await chrome.storage.local.set({ automationState: state });
+		window.location.reload();
+		return;
+	}
+
+	state.mode = "processing";
+	await chrome.storage.local.set({ automationState: state });
+	updateStatusUI("Starting export...");
+	processCurrentItem(state);
 }
 
 // --- Step: Process Item ---
