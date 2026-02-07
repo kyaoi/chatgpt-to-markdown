@@ -11,7 +11,14 @@ let bulkUI = null;
 
 // Create and inject the overlay UI
 function createBulkUI(initialState = null) {
-	if (bulkUI) return;
+	if (bulkUI) {
+		// Verify if it is still in DOM (ChatGPT might have wiped body)
+		if (document.body.contains(bulkUI)) {
+			return;
+		}
+		// It was detached. Reset and re-create.
+		bulkUI = null;
+	}
 
 	// Inject styles (Modern / Glassmorphism with Modal)
 	const style = document.createElement("style");
@@ -896,28 +903,45 @@ async function waitForSelector(selector, timeout = 10000) {
 
 // Called on page load
 async function checkAndResume() {
+	// Ensure body is ready just in case called early
+	if (!document.body) {
+		return new Promise((resolve) => {
+			document.addEventListener("DOMContentLoaded", () => {
+				checkAndResume().then(resolve);
+			});
+		});
+	}
+
 	const data = await chrome.storage.local.get(["automationState"]);
 	const state = data.automationState;
-	if (!state || !state.isRunning) return;
+	if (!state) return;
 
-	// We are running! Re-create UI
+	// Resume if running OR if we are in a finished state (to show result)
+	if (!state.isRunning && state.mode !== "finished") return;
+
+	// We are running (or finished)! Re-create UI
 	createBulkUI(state);
 
 	// Dispatch based on mode/step
 	if (state.mode === "initializing") {
-		// We just arrived at project page
-		state.mode = "scanning";
-		await chrome.storage.local.set({ automationState: state });
-		scanAndQueue(state);
+		// Just arrived at project page?
+		if (state.isRunning) {
+			state.mode = "scanning";
+			await chrome.storage.local.set({ automationState: state });
+			scanAndQueue(state);
+		}
 	} else if (state.mode === "scanning") {
-		scanAndQueue(state);
+		if (state.isRunning) scanAndQueue(state);
 	} else if (state.mode === "processing") {
-		updateStatusUI(`Waiting for page content...`);
-		// Wait for actual conversation content to appear
-		await waitForSelector(".prose", 10000);
-		processCurrentItem(state);
+		if (state.isRunning) {
+			updateStatusUI(`Waiting for page content...`);
+			// Wait for actual conversation content to appear
+			await waitForSelector(".prose", 10000);
+			processCurrentItem(state);
+		}
 	} else if (state.mode === "finished") {
-		// UI already shows finished state
+		// Restore finished UI
+		showFinishedState(state);
 	}
 }
 
@@ -1242,7 +1266,15 @@ async function processCurrentItem(state) {
 		// Convert
 		// Converter embeds images as Base64 (Canvas).
 		// To fix performance, we Extract these Base64 images and save them as files.
-		const markdown = converter.convert(document.body);
+		let markdown = converter.convert(document.body);
+		
+		// Inline ephemeral images (blob:, signed urls) to ensure they are saved in state
+		// This fixes the issue where images are lost after navigation
+		try {
+			markdown = await fileSaver.inlineImages(markdown);
+		} catch (e) {
+			console.error("BulkExport: Failed to inline images", e);
+		}
 
 
 
@@ -1435,7 +1467,11 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 });
 
 // Check resume on load
-checkAndResume();
+if (document.body) {
+	checkAndResume();
+} else {
+	document.addEventListener("DOMContentLoaded", checkAndResume);
+}
 
 console.log("ChatGPT to Markdown extension loaded (V2).");
 

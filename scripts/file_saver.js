@@ -216,6 +216,54 @@ class FileSaver {
 		}
 	}
 
+
+
+	/**
+	 * Convert blob: and signed URLs to Data URIs (Base64) to persist them across navigations.
+	 * @param {string} markdown - The markdown content
+	 * @returns {Promise<string>} - The markdown with inlined images
+	 */
+	async inlineImages(markdown) {
+		const imgRegex = /!\[(.*?)\]\((.+?)\)/g;
+		const matches = [...markdown.matchAll(imgRegex)];
+
+		if (matches.length === 0) return markdown;
+
+		let newMarkdown = markdown;
+
+		for (const match of matches) {
+			const fullMatch = match[0];
+			const url = match[2];
+
+			// Only inline temporary/private URLs
+			if (
+				url.startsWith("blob:") ||
+				url.includes("files.oaiusercontent.com") ||
+				url.startsWith("data:") // already data, but maybe we want to normalize? No, skip.
+			) {
+				if (url.startsWith("data:")) continue;
+
+				try {
+					const response = await fetch(url);
+					const blob = await response.blob();
+					
+					// Convert to Base64
+					const reader = new FileReader();
+					const base64 = await new Promise((resolve, reject) => {
+						reader.onloadend = () => resolve(reader.result);
+						reader.onerror = reject;
+						reader.readAsDataURL(blob);
+					});
+
+					newMarkdown = newMarkdown.replace(fullMatch, `![${match[1]}](${base64})`);
+				} catch (e) {
+					console.error("FileSaver: Failed to inline image", url, e);
+				}
+			}
+		}
+		return newMarkdown;
+	}
+
 	_processFrontmatter(content, template, defaultTags, metadata) {
 		const { title, url, date, time, folderName } = metadata;
 
