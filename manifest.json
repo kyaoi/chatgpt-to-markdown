@@ -4,7 +4,12 @@
 	"version": "1.0",
 	"description": "Save ChatGPT conversations as Markdown files with customizable paths.",
 	"permissions": ["activeTab", "downloads", "storage", "unlimitedStorage"],
-	"host_permissions": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+	"host_permissions": [
+		"https://chatgpt.com/*",
+		"https://chat.openai.com/*",
+		"https://*.oaiusercontent.com/*",
+		"<all_urls>"
+	],
 	"action": {
 		"default_popup": "popup/popup.html",
 		"default_icon": {

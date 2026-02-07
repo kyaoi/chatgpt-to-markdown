@@ -114,11 +114,21 @@ class FileSaver {
 	/**
 	 * Extracts Base64 images, saves them to 'images/' folder, and updates Markdown links.
 	 */
+	/**
+	 * Extracts images, downloads them, saves to 'images/' folder, and updates Markdown links.
+	 */
 	async _extractAndSaveImages(dirHandle, markdown, filename) {
-		const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
+		// Match standard markdown images: ![alt](url)
+		// Relaxed regex to capture any non-closing-paren URL character
+		const imgRegex = /!\[(.*?)\]\((.+?)\)/g;
 		const matches = [...markdown.matchAll(imgRegex)];
 
-		if (matches.length === 0) return markdown;
+		if (matches.length === 0) {
+            console.log("FileSaver: No images found in markdown.");
+            return markdown;
+        }
+
+        console.log(`FileSaver: Found ${matches.length} images to save.`);
 
 		let newMarkdown = markdown;
 		let imgCount = 0;
@@ -132,19 +142,42 @@ class FileSaver {
 			});
 		} catch (e) {
 			console.error("FileSaver: Could not create images directory", e);
-			return markdown; // Abort image extraction if we can't create folder
+            // Alert user if possible, or just return.
+            // Since we process in background often, console.error is best we can do here.
+			return markdown;
 		}
 
 		for (const match of matches) {
 			try {
 				const fullMatch = match[0];
-				// const alt = match[1]; // Unused
-				const dataURI = match[2];
-				const ext = match[3] === "jpeg" ? "jpg" : match[3];
+				const alt = match[1];
+				const url = match[2];
+
+                // Skip if URL is a reference to already saved local file (re-run safety)
+                if (url.startsWith("images/")) continue;
+
+				// Basic extension detection
+				let ext = "png";
+                // Helper to check extension
+                const lowerUrl = url.toLowerCase();
+				if (lowerUrl.includes(".jpg") || lowerUrl.includes(".jpeg")) ext = "jpg";
+				else if (lowerUrl.includes(".webp")) ext = "webp";
+				else if (lowerUrl.includes(".gif")) ext = "gif";
+                else if (lowerUrl.startsWith("data:image/jpeg")) ext = "jpg";
+                else if (lowerUrl.startsWith("data:image/webp")) ext = "webp";
 
 				const imgFilename = `${baseName}_img${imgCount}.${ext}`;
-				const blob = this._dataURItoBlob(dataURI);
 
+				// Clean the URL (remove tracking/resizing params)
+				const cleanUrl = this._cleanImageUrl(url);
+				
+				// Fetch the image (works for http, blob:, data:)
+				const response = await fetch(cleanUrl);
+				if (!response.ok)
+					throw new Error(`Failed to fetch image: ${response.statusText}`);
+				const blob = await response.blob();
+
+				// Write to file
 				const imgHandle = await imagesDir.getFileHandle(imgFilename, {
 					create: true,
 				});
@@ -152,9 +185,10 @@ class FileSaver {
 				await writable.write(blob);
 				await writable.close();
 
+				// Update Markdown link results in ![[images/filename.png]] for Obsidian
 				newMarkdown = newMarkdown.replace(
 					fullMatch,
-					`![[images/${imgFilename}]]`,
+					`![[images/${imgFilename}]]\n`,
 				);
 				imgCount++;
 			} catch (err) {
@@ -162,6 +196,24 @@ class FileSaver {
 			}
 		}
 		return newMarkdown;
+	}
+
+	/**
+	 * Remove specific query parameters from the image URL.
+	 * @param {string} url - The original URL
+	 * @returns {string} - The cleaned URL
+	 */
+	_cleanImageUrl(url) {
+		try {
+			const urlObj = new URL(url);
+			// params to remove: u, h, c, p
+			const paramsToRemove = ["u", "h", "c", "p"];
+			paramsToRemove.forEach((param) => urlObj.searchParams.delete(param));
+			return urlObj.toString();
+		} catch (e) {
+			// If URL parsing fails (e.g. data URI), return original
+			return url;
+		}
 	}
 
 	_processFrontmatter(content, template, defaultTags, metadata) {
@@ -222,16 +274,7 @@ class FileSaver {
 		return frontmatter + content;
 	}
 
-	_dataURItoBlob(dataURI) {
-		const byteString = atob(dataURI.split(",")[1]);
-		const mimeString = dataURI.split(",")[0].split(":")[1].split(";")[0];
-		const ab = new ArrayBuffer(byteString.length);
-		const ia = new Uint8Array(ab);
-		for (let i = 0; i < byteString.length; i++) {
-			ia[i] = byteString.charCodeAt(i);
-		}
-		return new Blob([ab], { type: mimeString });
-	}
+
 }
 
 globalThis.FileSaver = FileSaver;

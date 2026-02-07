@@ -188,28 +188,17 @@ class MarkdownConverter {
 						break;
 					case "img": {
 						const alt = child.getAttribute("alt") || "";
-						const src = child.getAttribute("src") || "";
+						// Escape parenthesis in URL
+						const src = (child.src || "").replace(/\(/g, "%28").replace(/\)/g, "%29");
 						console.log("Found Image:", src, "Alt:", alt);
 
 						// Deduplication
-						if (src === this.lastImageSrc) {
-							console.log("Skipping duplicate image:", src);
-							return;
+						// Keep original URL for downloading later
+						if (src) {
+							text += `![${alt}](${src})`;
+						} else {
+							console.warn("Image has no src:", child);
 						}
-						this.lastImageSrc = src;
-
-						// Try Base64
-						let base64 = this.imageToBase64(child);
-						console.log(
-							"Canvas conversion result:",
-							base64 ? `Success (Length: ${base64.length})` : "Failed/Null",
-						);
-
-						if (!base64 && src) {
-							base64 = src;
-						}
-
-						text += `![${alt}](${base64})`;
 						break;
 					}
 					case "table":
@@ -255,7 +244,10 @@ class MarkdownConverter {
 						text += this.domToMarkdown(child);
 						break;
 					case "button":
-						// Ignore buttons (citation sources, etc.)
+						// Recurse into buttons if they contain images (e.g. ChatGPT reference images)
+						if (child.querySelector("img")) {
+							text += this.domToMarkdown(child);
+						}
 						break;
 					case "math": {
 						// fallback if we hit a raw math tag not wrapped in known katex structure
@@ -349,23 +341,7 @@ class MarkdownConverter {
 
 		return text;
 	}
-	imageToBase64(img) {
-		try {
-			if (!img.complete || img.naturalWidth === 0) return null;
 
-			const canvas = document.createElement("canvas");
-			canvas.width = img.naturalWidth;
-			canvas.height = img.naturalHeight;
-
-			const ctx = canvas.getContext("2d");
-			ctx.drawImage(img, 0, 0);
-
-			return canvas.toDataURL("image/png");
-		} catch (e) {
-			console.warn("Canvas conversion failed (likely tainted)", e);
-			return null;
-		}
-	}
 
 	normalizeBoldSpacing(text) {
 		return this.applyToNonCode(text, (segment) => this.fixBoldSpacing(segment));

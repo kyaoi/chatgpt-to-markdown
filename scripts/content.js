@@ -1244,45 +1244,7 @@ async function processCurrentItem(state) {
 		// To fix performance, we Extract these Base64 images and save them as files.
 		const markdown = converter.convert(document.body);
 
-		// --- Image Extraction (Base64 -> File) ---
-		// 1. Create images folder (lazy, only if needed)
-		// We can't easily "check" if folder exists in FileSystemAccessAPI without try/catch
-		// We'll assume we write to 'images/' relative filename
 
-		const imgRegex = /!\[(.*?)\]\((data:image\/([^;]+);base64,[^)]+)\)/g;
-		// We need to replace async, so we'll matchAll first
-		const matches = [...markdown.matchAll(imgRegex)];
-
-		if (matches.length > 0) {
-			updateStatusUI(`Saving ${matches.length} images...`);
-
-			// Try to create/get images directory handle?
-			// Actually, we can just save to "images/filename.png" if we are in the root dir handle?
-			// FileSystemDirectoryHandle.getFileHandle('images/foo.png') might not work directly if subfolder doesn't exist.
-			// We usually need to getDirectoryHandle('images', {create: true}) first.
-
-			// However, processCurrentItem doesn't have reference to the ROOT dirHandle easily
-			// unless we pass it or store it globally.
-			// Wait, saveAllToDisk handles the actual writing!
-
-			// CRITICAL: processCurrentItem runs in the content script context gathering data.
-			// saveAllToDisk runs LATER when the user clicks "Save".
-			// We CANNOT write files here in processCurrentItem because we don't have the User Gesture / DirHandle yet!
-
-			// SOLUTION:
-			// We must keep the Base64 data IN MEMORY (in state.results) until saveAllToDisk is called.
-			// BUT the user complains the file is too big to open. (Presumably referring to the final output?)
-			// OR did they mean "The extension crashes"?
-			// "画像のBaseが大きすぎて開くのにくそほど時間がかかります" -> "Resulting Markdown is slow to open".
-			// So we just need to ensure the FINAL file on disk is clean.
-			// Storing Base64 in `state` (Chrome Storage) MIGHT hit the 5MB/unlimited quota limits or slow down the extension.
-			// But if we can't write to disk yet... we have no choice but to keep it in memory.
-
-			// wait, `state.results` acts as the buffer.
-			// If we keep Base64 there, `saveAllToDisk` can perform the Extraction.
-			// So content.js `processCurrentItem` is actually fine leaving it as Base64!
-			// The Extraction logic should move to `saveAllToDisk`.
-		}
 
 		// Metadata for Frontmatter (Defer application to save time)
 		const date = new Date();
@@ -1327,22 +1289,7 @@ async function processCurrentItem(state) {
 }
 
 // Helper: Fetch image and convert to Base64
-async function _fetchImageAsBase64(url) {
-	try {
-		const response = await fetch(url);
-		if (!response.ok) throw new Error(`HTTP ${response.status}`);
-		const blob = await response.blob();
-		return new Promise((resolve, reject) => {
-			const reader = new FileReader();
-			reader.onloadend = () => resolve(reader.result);
-			reader.onerror = reject;
-			reader.readAsDataURL(blob);
-		});
-	} catch (e) {
-		console.warn("Image fetch failed", e);
-		return null;
-	}
-}
+
 
 // --- Step: Finalize (Save All) ---
 
